@@ -37,6 +37,9 @@ export const UNITS_BY_DIMENSION = {
   [DIMENSIONS.COUNT]: ['count', 'dozen']
 };
 
+/** Every recognized unit key, for quick "is this a real unit" checks. */
+export const KNOWN_UNITS = new Set(Object.keys(UNITS));
+
 export const dimensionOf = (unit) => UNITS[unit]?.dimension ?? null;
 export const unitLabel = (unit) => UNITS[unit]?.label ?? unit;
 

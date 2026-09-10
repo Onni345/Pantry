@@ -95,6 +95,9 @@ check('macros summary', () => renderToString(wrap(React.createElement(MacrosSumm
 const RecipeSuggestions = (await load('/src/features/recipes/RecipeSuggestions.jsx')).default;
 check('recipe suggestions (idle)', () => renderToString(wrap(React.createElement(RecipeSuggestions))));
 
+const ReceiptScan = (await load('/src/features/receipts/ReceiptScan.jsx')).default;
+check('receipt scan (idle)', () => renderToString(wrap(React.createElement(ReceiptScan, { onClose() {} }))));
+
 const Settings = (await load('/src/components/Settings.jsx')).default;
 check('settings panel', () =>
   renderToString(React.createElement(Settings, {

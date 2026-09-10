@@ -1,0 +1,34 @@
+/*
+ * Generic modal shell (backdrop + centered card) — introduced by receipt
+ * scanning, the first feature that needs a popup rather than inline content.
+ * Flat per the styling constraints: a solid translucent backdrop, no blur,
+ * no drop shadow on the card.
+ */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(31, 31, 31, 0.5);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--space-3);
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.modal {
+  width: 100%;
+  max-width: 32rem;
+  margin-top: var(--space-4);
+}
+
+.receipt-rows {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.receipt-row { border-color: var(--line); }
+
+.receipt-price {
+  width: 6rem;
+}

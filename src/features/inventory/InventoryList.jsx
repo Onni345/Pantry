@@ -4,18 +4,25 @@ import AddItemForm from './AddItemForm.jsx';
 import ItemCard from './ItemCard.jsx';
 import InventoryControls from './InventoryControls.jsx';
 import { applyView, defaultView } from './sortFilter.js';
+import ReceiptScan from '../receipts/ReceiptScan.jsx';
 import './inventory.css';
 
 export default function InventoryList() {
   const { items, loading, error } = useInventory();
   const [view, setView] = useState(defaultView);
+  const [scanning, setScanning] = useState(false);
 
   const shown = useMemo(() => applyView(items, view), [items, view]);
   const hiddenCount = items.length - shown.length;
 
   return (
     <div className="stack inventory">
-      <AddItemForm />
+      <div className="row wrap">
+        <AddItemForm />
+        <button onClick={() => setScanning(true)}>Scan a receipt</button>
+      </div>
+
+      {scanning && <ReceiptScan onClose={() => setScanning(false)} />}
 
       {error && <p className="error">{error}</p>}
 

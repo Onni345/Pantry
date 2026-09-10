@@ -127,7 +127,7 @@ const RESPONSE_SCHEMA = {
   required: ['unopened_fridge', 'opened_fridge', 'freezer', 'pantry']
 };
 
-async function requestOnce(model, prompt, schema, maxOutputTokens, signal) {
+async function requestOnce(model, parts, schema, maxOutputTokens, signal) {
   const res = await fetch(base(model), {
     method: 'POST',
     signal,
@@ -135,7 +135,7 @@ async function requestOnce(model, prompt, schema, maxOutputTokens, signal) {
     // not end up in browser history or any intermediary's request logs.
     headers: { 'content-type': 'application/json', 'x-goog-api-key': getApiKey() },
     body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
+      contents: [{ parts }],
       generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: schema,
@@ -149,17 +149,24 @@ async function requestOnce(model, prompt, schema, maxOutputTokens, signal) {
 
 /**
  * Runs a structured-output request against Gemini, trying MODELS in order
- * until one answers. Shared by shelf-life estimation and recipe suggestions
- * so both get the same model-fallback and error handling for free.
+ * until one answers. Shared by shelf-life estimation, recipe suggestions and
+ * receipt scanning so all three get the same model-fallback and error
+ * handling for free.
+ *
+ * `parts` is a Gemini "parts" array — `[{ text }]` for a plain prompt, or
+ * `[{ text }, { inlineData: { mimeType, data } }]` to attach an image. A bare
+ * string is accepted too and wrapped as a single text part, since most
+ * callers only ever send text.
  */
-export async function callGeminiJSON(prompt, schema, { maxOutputTokens = 300, signal } = {}) {
+export async function callGeminiJSON(parts, schema, { maxOutputTokens = 300, signal } = {}) {
+  const partsArray = typeof parts === 'string' ? [{ text: parts }] : parts;
   const remembered = rememberedModel();
   const order = remembered ? [remembered, ...MODELS.filter((m) => m !== remembered)] : MODELS;
 
   let lastError = null;
 
   for (const model of order) {
-    const res = await requestOnce(model, prompt, schema, maxOutputTokens, signal);
+    const res = await requestOnce(model, partsArray, schema, maxOutputTokens, signal);
 
     if (res.ok) {
       const data = await res.json();
@@ -278,4 +285,21 @@ export async function suggestRecipes(items, { signal } = {}) {
   const { prompt, schema } = buildPrompt(stock);
   const text = await callGeminiJSON(prompt, schema, { maxOutputTokens: 2000, signal });
   return parseRecipes(text, stock);
+}
+
+/**
+ * Reads a photographed/uploaded grocery receipt and returns editable staging
+ * rows (see features/receipts/receipts.js) — never writes to inventory
+ * itself. No cache: a receipt is a one-time read, not a lookup key that
+ * recurs the way a food name or a stock snapshot does.
+ *
+ * `imageBase64` is raw base64 (no `data:` prefix); `mimeType` e.g. `image/jpeg`.
+ */
+export async function scanReceipt(imageBase64, mimeType, { signal } = {}) {
+  const { buildReceiptPrompt, parseReceiptItems } = await import('../features/receipts/receipts.js');
+  const { prompt, schema } = buildReceiptPrompt();
+
+  const parts = [{ text: prompt }, { inlineData: { mimeType, data: imageBase64 } }];
+  const text = await callGeminiJSON(parts, schema, { maxOutputTokens: 2000, signal });
+  return parseReceiptItems(text);
 }

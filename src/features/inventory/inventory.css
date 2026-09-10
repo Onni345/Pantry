@@ -3,6 +3,7 @@
 .label { font-size: 14px; }
 
 .add-toggle { width: 100%; }
+.add-form { flex: 1 1 100%; }
 
 .add-form .field-grid {
   display: grid;

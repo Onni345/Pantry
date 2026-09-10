@@ -3,6 +3,7 @@ import { useInventory } from '../../context/InventoryContext.jsx';
 import { CATEGORIES, LOCATIONS } from '../../db/schema.js';
 import { UNITS_BY_DIMENSION, DIMENSIONS, unitLabel } from '../../units.js';
 import FoodSearchInput from '../../components/FoodSearchInput.jsx';
+import { guessCategory } from './categoryGuess.js';
 
 const blank = {
   name: '',
@@ -147,23 +148,4 @@ export default function AddItemForm({ defaultOpen = false }) {
       </div>
     </form>
   );
-}
-
-/** Cheap keyword guess so the category dropdown is usually already right. */
-function guessCategory(name) {
-  const n = String(name).toLowerCase();
-  const map = [
-    ['dairy', /milk|cheese|yogurt|yoghurt|butter|cream|kefir/],
-    ['produce', /apple|banana|lettuce|spinach|tomato|onion|potato|carrot|pepper|berry|berries|orange|grape|broccoli|cucumber/],
-    ['meat', /chicken|beef|pork|turkey|lamb|bacon|sausage|ham/],
-    ['seafood', /salmon|tuna|shrimp|cod|tilapia|fish|crab/],
-    ['grain', /bread|rice|pasta|oat|cereal|flour|tortilla|quinoa|noodle/],
-    ['beverage', /juice|soda|coffee|tea|water|beer|wine/],
-    ['condiment', /sauce|ketchup|mustard|mayo|dressing|vinegar|syrup/],
-    ['snack', /chip|cracker|cookie|candy|chocolate|granola bar/],
-    ['canned', /canned|can of|tinned/],
-    ['frozen', /frozen/]
-  ];
-  for (const [cat, re] of map) if (re.test(n)) return cat;
-  return null;
 }
