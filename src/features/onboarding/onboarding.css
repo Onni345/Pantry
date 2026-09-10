@@ -1,0 +1,22 @@
+.setup {
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4) var(--space-3);
+}
+
+.setup-inner {
+  width: 100%;
+  max-width: 26rem;
+}
+
+.setup .small { font-size: 14px; }
+
+.code-box {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  margin: 0;
+}

@@ -1,0 +1,15 @@
+.amount-entry {
+  width: 100%;
+  border-top: 1px solid var(--line);
+  padding-top: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.amount-fields {
+  display: grid;
+  grid-template-columns: 1fr 7rem;
+  gap: var(--space-2);
+}
+
+.approx { font-style: italic; }
+.warn { color: var(--danger); }

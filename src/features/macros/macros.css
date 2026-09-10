@@ -1,0 +1,28 @@
+.macros { width: 100%; }
+
+.macro-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: var(--space-2);
+}
+
+.macro-stat { text-align: left; }
+.macro-value { font-size: 24px; font-weight: 700; }
+
+.macro-list { list-style: none; margin: 0; padding: 0; }
+.macro-list li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  border-bottom: 1px solid var(--line);
+}
+.macro-list li:last-child { border-bottom: 0; }
+.macro-item-name { font-weight: 700; overflow-wrap: anywhere; }
+
+.coverage { border-color: var(--muted); }
+
+@media (min-width: 34rem) {
+  .macro-grid { grid-template-columns: repeat(4, 1fr); }
+}

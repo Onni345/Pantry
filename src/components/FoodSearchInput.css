@@ -1,0 +1,45 @@
+.food-search { position: relative; }
+
+.food-results {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  max-height: 16rem;
+  overflow-y: auto;
+}
+
+.food-result {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: var(--space-2) var(--space-3);
+}
+.food-result:hover:not(:disabled) { opacity: 1; }
+.food-result.is-active { background: var(--bg); }
+.food-result-name { overflow-wrap: anywhere; }
+
+.food-chosen {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+}
+.food-chosen-text { min-width: 0; flex: 1; }
+.food-chosen-name { font-weight: 700; overflow-wrap: anywhere; }
