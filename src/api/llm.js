@@ -127,7 +127,7 @@ const RESPONSE_SCHEMA = {
   required: ['unopened_fridge', 'opened_fridge', 'freezer', 'pantry']
 };
 
-async function requestOnce(model, prompt, signal) {
+async function requestOnce(model, prompt, schema, maxOutputTokens, signal) {
   const res = await fetch(base(model), {
     method: 'POST',
     signal,
@@ -138,23 +138,28 @@ async function requestOnce(model, prompt, signal) {
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: {
         responseMimeType: 'application/json',
-        responseSchema: RESPONSE_SCHEMA,
+        responseSchema: schema,
         temperature: 0,
-        maxOutputTokens: 300
+        maxOutputTokens
       }
     })
   });
   return res;
 }
 
-async function callGemini(prompt, signal) {
+/**
+ * Runs a structured-output request against Gemini, trying MODELS in order
+ * until one answers. Shared by shelf-life estimation and recipe suggestions
+ * so both get the same model-fallback and error handling for free.
+ */
+export async function callGeminiJSON(prompt, schema, { maxOutputTokens = 300, signal } = {}) {
   const remembered = rememberedModel();
   const order = remembered ? [remembered, ...MODELS.filter((m) => m !== remembered)] : MODELS;
 
   let lastError = null;
 
   for (const model of order) {
-    const res = await requestOnce(model, prompt, signal);
+    const res = await requestOnce(model, prompt, schema, maxOutputTokens, signal);
 
     if (res.ok) {
       const data = await res.json();
@@ -185,16 +190,18 @@ async function callGemini(prompt, signal) {
     // further models would just burn more of an already-exhausted quota.
     const err = new Error(
       res.status === 429
-        ? 'Gemini quota exceeded for now. Estimates will resume later.'
+        ? 'Gemini quota exceeded for now. Try again later.'
         : res.status === 403 || /API key not valid/i.test(body)
           ? 'That API key was rejected. Check it in Settings.'
-          : `Expiry lookup failed (${res.status}).`
+          : res.status === 400
+            ? `Gemini rejected the request (${res.status}). This is a bug, not a quota issue.`
+            : `Gemini request failed (${res.status}).`
     );
     err.status = res.status;
     throw err;
   }
 
-  throw lastError || new Error('Expiry lookup failed.');
+  throw lastError || new Error('Gemini request failed.');
 }
 
 /**
@@ -209,7 +216,7 @@ export async function getShelfLife(name, category, { signal } = {}) {
 
   if (!hasApiKey()) return null;
 
-  const text = await callGemini(PROMPT(name, category), signal);
+  const text = await callGeminiJSON(PROMPT(name, category), RESPONSE_SCHEMA, { signal });
   const parsed = parseShelfLife(text);
 
   await db.expiry_cache.put({
@@ -251,4 +258,24 @@ export async function estimateExpiryFor(item) {
     console.warn('expiry: estimate failed', e.message);
     return null;
   }
+}
+
+
+/**
+ * Asks Gemini for recipe ideas grounded in the current inventory.
+ * Costs one real call every time — this has no cache, since a recipe result
+ * is only valid for the exact stock it was generated from, and a cache key
+ * that changes on every use/add would essentially never hit.
+ */
+export async function suggestRecipes(items, { signal } = {}) {
+  const { buildPrompt, parseRecipes, eligibleItems } = await import('../features/recipes/recipes.js');
+
+  const stock = eligibleItems(items);
+  if (stock.length === 0) {
+    throw new Error('Nothing weighed and in stock to build a recipe from yet.');
+  }
+
+  const { prompt, schema } = buildPrompt(stock);
+  const text = await callGeminiJSON(prompt, schema, { maxOutputTokens: 2000, signal });
+  return parseRecipes(text, stock);
 }

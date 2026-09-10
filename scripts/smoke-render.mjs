@@ -92,6 +92,9 @@ check('amount entry — counted item', () =>
 const MacrosSummary = (await load('/src/features/macros/MacrosSummary.jsx')).default;
 check('macros summary', () => renderToString(wrap(React.createElement(MacrosSummary))));
 
+const RecipeSuggestions = (await load('/src/features/recipes/RecipeSuggestions.jsx')).default;
+check('recipe suggestions (idle)', () => renderToString(wrap(React.createElement(RecipeSuggestions))));
+
 const Settings = (await load('/src/components/Settings.jsx')).default;
 check('settings panel', () =>
   renderToString(React.createElement(Settings, {

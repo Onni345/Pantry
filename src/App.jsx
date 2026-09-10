@@ -10,6 +10,7 @@ import HouseholdPicker from './features/onboarding/HouseholdPicker.jsx';
 import NoAccess from './features/onboarding/NoAccess.jsx';
 import InventoryList from './features/inventory/InventoryList.jsx';
 import MacrosSummary from './features/macros/MacrosSummary.jsx';
+import RecipeSuggestions from './features/recipes/RecipeSuggestions.jsx';
 import SyncStatus from './components/SyncStatus.jsx';
 import Settings from './components/Settings.jsx';
 import './app.css';
@@ -133,9 +134,14 @@ export default function App() {
           <button className={tab === 'macros' ? 'primary' : ''} onClick={() => setTab('macros')}>
             Intake
           </button>
+          <button className={tab === 'recipes' ? 'primary' : ''} onClick={() => setTab('recipes')}>
+            Recipes
+          </button>
         </nav>
 
-        {tab === 'inventory' ? <InventoryList /> : <MacrosSummary />}
+        {tab === 'inventory' && <InventoryList />}
+        {tab === 'macros' && <MacrosSummary />}
+        {tab === 'recipes' && <RecipeSuggestions />}
       </div>
     </InventoryProvider>
   );

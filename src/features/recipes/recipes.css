@@ -1,0 +1,5 @@
+.recipes { width: 100%; }
+
+.recipe-card { align-items: stretch; }
+.recipe-uses { list-style: none; margin: 0; padding: 0; }
+.recipe-instructions { white-space: pre-wrap; }
