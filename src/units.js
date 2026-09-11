@@ -16,6 +16,40 @@
 
 export const DIMENSIONS = { WEIGHT: 'weight', COUNT: 'count' };
 
+/**
+ * Natural units: nouns you count. "14 slices", "2 containers", "half a
+ * gallon". The app does not need to know what a slice weighs to track that
+ * you have fourteen of them — weight is optional metadata, not the price of
+ * entry. Anything here behaves as a count: one unit, whatever a unit is.
+ */
+export const NATURAL_UNITS = [
+  'item', 'pack', 'container', 'bottle', 'can', 'jar', 'box', 'bag', 'carton', 'tub',
+  'egg', 'slice', 'loaf', 'bunch', 'head', 'clove', 'stick', 'breast', 'fillet', 'steak',
+  'gallon', 'quart', 'pint', 'litre', 'cup'
+];
+
+/** A handful of nouns that don't pluralise by adding an s. */
+const IRREGULAR = { loaf: 'loaves', leaf: 'leaves', bunch: 'bunches', box: 'boxes' };
+
+export function pluralize(noun, n) {
+  const v = Math.abs(Number(n) || 0);
+  // "1 gallon" and "½ gallon", but "0 eggs" and "1½ gallons".
+  if (v === 1 || (v > 0 && v < 1)) return noun;
+  return IRREGULAR[noun] || `${noun}s`;
+}
+
+/** ½ reads better than 0.5 on a carton of milk. */
+const FRACTIONS = { 0.25: '¼', 0.5: '½', 0.75: '¾', 0.33: '⅓', 0.67: '⅔' };
+
+export function niceNumber(n) {
+  const v = Number(n) || 0;
+  const whole = Math.floor(v);
+  const frac = Math.round((v - whole) * 100) / 100;
+  const glyph = FRACTIONS[frac];
+  if (!glyph) return String(round(v, 2));
+  return whole === 0 ? glyph : `${whole}${glyph}`;
+}
+
 export const BASE_UNIT = {
   [DIMENSIONS.WEIGHT]: 'g',
   [DIMENSIONS.COUNT]: 'count'
@@ -28,14 +62,35 @@ export const UNITS = {
   oz:    { dimension: DIMENSIONS.WEIGHT, factor: 28.349523125, label: 'oz' },
   lb:    { dimension: DIMENSIONS.WEIGHT, factor: 453.59237,    label: 'lb' },
 
-  count: { dimension: DIMENSIONS.COUNT, factor: 1,  label: 'count' },
+  count: { dimension: DIMENSIONS.COUNT, factor: 1,  label: 'item' },
   dozen: { dimension: DIMENSIONS.COUNT, factor: 12, label: 'dozen' }
 };
 
+for (const noun of NATURAL_UNITS) {
+  if (!UNITS[noun]) UNITS[noun] = { dimension: DIMENSIONS.COUNT, factor: 1, label: noun };
+}
+
 export const UNITS_BY_DIMENSION = {
   [DIMENSIONS.WEIGHT]: ['g', 'kg', 'oz', 'lb'],
-  [DIMENSIONS.COUNT]: ['count', 'dozen']
+  [DIMENSIONS.COUNT]: ['count', 'dozen', ...NATURAL_UNITS.filter((u) => u !== 'item')]
 };
+
+/**
+ * How an item reads to a person: "8 eggs", "14 slices", "½ gallon", "1.1 kg".
+ *
+ * The stored shape (quantity + base unit + the noun it was bought in) is
+ * never what's shown. An item counted in slices says slices; only genuinely
+ * weighed things talk in grams.
+ */
+export function describe(item) {
+  const qty = Number(item.quantity) || 0;
+  if (item.base_unit === 'g') {
+    const { value, unit } = humanize(qty, 'g');
+    return `${value} ${unit}`;
+  }
+  const noun = item.display_unit && item.display_unit !== 'count' ? item.display_unit : 'item';
+  return `${niceNumber(qty)} ${pluralize(noun, qty)}`;
+}
 
 /** Every recognized unit key, for quick "is this a real unit" checks. */
 export const KNOWN_UNITS = new Set(Object.keys(UNITS));

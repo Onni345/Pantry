@@ -6,6 +6,7 @@
  * defined once rather than drifting between two copies.
  */
 const RULES = [
+  ['eggs', /\begg/],
   ['dairy', /milk|cheese|yogurt|yoghurt|butter|cream|kefir/],
   ['produce', /apple|banana|lettuce|spinach|tomato|onion|potato|carrot|pepper|berry|berries|orange|grape|broccoli|cucumber/],
   ['meat', /chicken|beef|pork|turkey|lamb|bacon|sausage|ham/],

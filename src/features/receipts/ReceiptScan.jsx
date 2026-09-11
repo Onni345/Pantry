@@ -1,43 +1,45 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { useInventory } from '../../context/InventoryContext.jsx';
-import { hasApiKey, scanReceipt } from '../../api/llm.js';
 import { lookupFood } from '../../api/foodLookup.js';
-import { withMatch, includedRows } from './receipts.js';
+import { recognizeReceiptText } from './ocr.js';
+import {
+  extractCandidateLines, toRows, acceptFoodMatch, withMatch, includedRows
+} from './receipts.js';
 import { guessCategory } from '../inventory/categoryGuess.js';
 import { UNITS_BY_DIMENSION, DIMENSIONS, unitLabel } from '../../units.js';
+import { LOCATIONS } from '../../db/schema.js';
 import FoodSearchInput from '../../components/FoodSearchInput.jsx';
 import './receipts.css';
 
 /**
  * Photo-a-receipt → editable staging list → "mass add" to the fridge.
  *
- * Nothing here writes to inventory until Save: `scanReceipt` only ever
- * returns rows, and food matching (below) only ever attaches a candidate to
- * a row. The actual write reuses `addItem` from InventoryContext — the same
- * function the manual add form uses — so a receipt-added item is
- * indistinguishable from a hand-added one and there is exactly one place
- * that knows how to add an item to a household.
+ * OCR the photo, pull out the priced lines, show them, add the ones you tick.
+ * No model call anywhere in that path, so it works offline with no API key.
+ * Nothing is written until Save, which uses the same `addItem` the manual
+ * form does.
  */
 export default function ReceiptScan({ onClose }) {
   const { addItem } = useInventory();
-  const [state, setState] = useState('idle'); // idle | reading | staging | saving | error | no-key
+  const [state, setState] = useState('idle'); // idle | ocr | staging | saving | error
+  const [progress, setProgress] = useState(0);
   const [rows, setRows] = useState([]);
   const [error, setError] = useState('');
-  const fileRef = useRef(null);
+  const [location, setLocation] = useState('fridge');
 
   function updateRow(id, patch) {
     setRows((rs) => rs.map((r) => (r.id === id ? { ...r, ...patch } : r)));
   }
 
   /**
-   * Fires one food-lookup per row, each landing independently as it
-   * resolves — a receipt can have 20 lines, and the user should see matches
-   * appear rather than wait for the slowest one.
+   * Looks each row up in the food database for its macros, independently so
+   * a slow one doesn't hold up the rest. A row that finds nothing plausible
+   * just carries no macros — better than a confident wrong match.
    */
   function matchAll(staged) {
     for (const row of staged) {
-      lookupFood(row.name, { limit: 1 })
-        .then(({ results }) => updateRow(row.id, withMatch(row, results[0] || null)))
+      lookupFood(row.name, { limit: 8 })
+        .then(({ results }) => updateRow(row.id, withMatch(row, results.find((f) => acceptFoodMatch(row.name, f)) || null)))
         .catch(() => updateRow(row.id, withMatch(row, null)));
     }
   }
@@ -47,14 +49,16 @@ export default function ReceiptScan({ onClose }) {
     e.target.value = ''; // allow re-selecting the same file later
     if (!file) return;
 
-    if (!hasApiKey()) { setState('no-key'); return; }
-
-    setState('reading');
+    setState('ocr');
+    setProgress(0);
     setError('');
     try {
-      const { base64, mimeType } = await fileToBase64(file);
-      const staged = await scanReceipt(base64, mimeType);
-      if (staged.length === 0) throw new Error('No food items found on that receipt.');
+      const text = await recognizeReceiptText(file, { onProgress: setProgress });
+      const candidates = extractCandidateLines(text);
+      if (candidates.length === 0) {
+        throw new Error('Could not find any priced item lines on that receipt.');
+      }
+      const staged = toRows(candidates);
       setRows(staged);
       setState('staging');
       matchAll(staged);
@@ -73,7 +77,7 @@ export default function ReceiptScan({ onClose }) {
           name: row.name.trim(),
           quantity: row.quantity,
           unit: row.unit,
-          location: 'pantry',
+          location,
           category: guessCategory(row.name) || 'other',
           food_db_id: row.matchedFood?.food_db_id || null
         });
@@ -93,34 +97,24 @@ export default function ReceiptScan({ onClose }) {
           <button className="link-button" onClick={onClose}>Close</button>
         </div>
 
-        {state === 'no-key' && (
-          <p className="muted">
-            Receipt scanning needs a Gemini API key. Add one in Settings, then come back here.
-          </p>
-        )}
-
         {(state === 'idle' || state === 'error') && (
           <>
             <p className="muted">
               Take a photo of a receipt, or upload one. Nothing is added to your inventory
               until you review and save it below.
             </p>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={onFileChange}
-            />
+            <input type="file" accept="image/*" capture="environment" onChange={onFileChange} />
             {error && <p className="error label">{error}</p>}
           </>
         )}
 
-        {state === 'reading' && <p className="muted">Reading the receipt…</p>}
+        {state === 'ocr' && (
+          <p className="muted">Reading the photo… {Math.round(progress * 100)}%</p>
+        )}
 
         {(state === 'staging' || state === 'saving') && (
           <>
-            <div className="stack-tight receipt-rows">
+            <div className="receipt-rows">
               {rows.map((row) => (
                 <ReceiptRow key={row.id} row={row} onChange={(patch) => updateRow(row.id, patch)} />
               ))}
@@ -128,16 +122,28 @@ export default function ReceiptScan({ onClose }) {
 
             {error && <p className="error label">{error}</p>}
 
-            <div className="row" style={{ justifyContent: 'space-between' }}>
+            <div className="row receipt-footer">
+              {/* One shelf for the whole shop — a receipt is usually unpacked
+                  into the same place, and per-row pickers would be nine
+                  dropdowns to answer one question. Individual items move
+                  later from their card. */}
+              <label className="row receipt-destination">
+                <span className="label muted">Put in</span>
+                <select value={location} onChange={(e) => setLocation(e.target.value)}>
+                  {LOCATIONS.map((l) => (
+                    <option key={l} value={l}>{l}</option>
+                  ))}
+                </select>
+              </label>
               <span className="label muted">
-                {includedRows(rows).length} of {rows.length} items will be added
+                {includedRows(rows).length} of {rows.length}
               </span>
               <button
                 className="primary"
                 onClick={save}
                 disabled={state === 'saving' || includedRows(rows).length === 0}
               >
-                {state === 'saving' ? 'Adding…' : 'Add to fridge'}
+                {state === 'saving' ? 'Adding…' : `Add to ${location}`}
               </button>
             </div>
           </>
@@ -147,97 +153,65 @@ export default function ReceiptScan({ onClose }) {
   );
 }
 
-function ReceiptRow({ row, onChange }) {
+// Named so smoke-render.mjs can render a staged row directly.
+export function ReceiptRow({ row, onChange }) {
   return (
-    <div className="card stack-tight receipt-row">
-      <div className="row" style={{ justifyContent: 'space-between' }}>
-        <label className="row" style={{ gap: 'var(--space-1)' }}>
-          <input
-            type="checkbox"
-            checked={row.include}
-            onChange={(e) => onChange({ include: e.target.checked })}
-          />
-          <span className="label muted">Include</span>
-        </label>
-        {row.price != null && (
-          <input
-            className="receipt-price"
-            type="number"
-            inputMode="decimal"
-            min="0"
-            step="any"
-            value={row.price}
-            onChange={(e) => onChange({ price: Number(e.target.value) })}
-            title="Price — not saved yet; budgeting comes later"
-          />
-        )}
-      </div>
+    <div className="receipt-row">
+      <input
+        type="checkbox"
+        checked={row.include}
+        onChange={(e) => onChange({ include: e.target.checked })}
+        title="Include in save"
+      />
 
-      {row.matchStatus === 'matched' ? (
+      <div className="receipt-row-name">
         <FoodSearchInput
           value={row.name}
-          selected={row.matchedFood}
+          selected={null}
           onChange={(name) => onChange({ name })}
-          onSelect={(food) => onChange({ name: food.name, matchStatus: 'matched', matchedFood: food })}
-          onClear={() => onChange({ matchStatus: 'not_found', matchedFood: null })}
+          onSelect={(food) => onChange({ matchStatus: 'matched', matchedFood: food })}
+          onClear={() => {}}
         />
-      ) : (
-        <div className="stack-tight">
-          <span className="label muted">
-            {row.matchStatus === 'searching' ? 'Matching…' : 'NOT FOUND — search manually'}
-          </span>
-          <FoodSearchInput
-            value={row.name}
-            selected={null}
-            onChange={(name) => onChange({ name })}
-            onSelect={(food) => onChange({ name: food.name, matchStatus: 'matched', matchedFood: food })}
-            onClear={() => {}}
-          />
-        </div>
-      )}
+      </div>
 
-      <div className="field-grid">
-        <label className="stack-tight">
-          <span className="label">Qty</span>
-          <input
-            type="number"
-            inputMode="decimal"
-            min="0"
-            step="any"
-            value={row.quantity}
-            onChange={(e) => onChange({ quantity: Number(e.target.value) })}
-          />
-        </label>
-        <label className="stack-tight">
-          <span className="label">Unit</span>
-          <select value={row.unit} onChange={(e) => onChange({ unit: e.target.value })}>
-            <optgroup label="Count">
-              {UNITS_BY_DIMENSION[DIMENSIONS.COUNT].map((u) => (
-                <option key={u} value={u}>{unitLabel(u)}</option>
-              ))}
-            </optgroup>
-            <optgroup label="Weight">
-              {UNITS_BY_DIMENSION[DIMENSIONS.WEIGHT].map((u) => (
-                <option key={u} value={u}>{unitLabel(u)}</option>
-              ))}
-            </optgroup>
-          </select>
-        </label>
+      {/* Own line under the name on a phone; same line on a laptop. */}
+      <div className="receipt-fields">
+        <input
+          className="receipt-qty"
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="any"
+          value={row.quantity}
+          onChange={(e) => onChange({ quantity: Number(e.target.value) })}
+          aria-label="Quantity"
+        />
+
+        <select
+          className="receipt-unit"
+          value={row.unit}
+          onChange={(e) => onChange({ unit: e.target.value })}
+          aria-label="Unit"
+        >
+          <optgroup label="Count">
+            {UNITS_BY_DIMENSION[DIMENSIONS.COUNT].map((u) => (
+              <option key={u} value={u}>{unitLabel(u)}</option>
+            ))}
+          </optgroup>
+          <optgroup label="Weight">
+            {UNITS_BY_DIMENSION[DIMENSIONS.WEIGHT].map((u) => (
+              <option key={u} value={u}>{unitLabel(u)}</option>
+            ))}
+          </optgroup>
+        </select>
+
+        {/* Read-only: there's nowhere to store a price yet, so an editable
+            box would silently drop the edit. Shown because it's the fastest
+            way to tell which row is which. */}
+        <span className="receipt-price">
+          {row.price == null ? '' : row.price.toFixed(2)}
+        </span>
       </div>
     </div>
   );
-}
-
-/** File → { base64, mimeType }, stripping the `data:...;base64,` prefix Gemini doesn't want. */
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onerror = () => reject(new Error('Could not read that file.'));
-    reader.onload = () => {
-      const result = String(reader.result || '');
-      const comma = result.indexOf(',');
-      resolve({ base64: result.slice(comma + 1), mimeType: file.type || 'image/jpeg' });
-    };
-    reader.readAsDataURL(file);
-  });
 }

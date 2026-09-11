@@ -89,7 +89,7 @@ device that hasn't synced yet still learns an item was removed.
 | `type` | `add` \| `remove` \| `consumed_remainder` \| `undo`. |
 | `quantity_delta` | Signed. Current quantity = `max(0, sum(quantity_delta))`, always derived, never stored. |
 | `entered_value`, `entered_unit` | What the user actually typed (e.g. `2, "oz"`), kept alongside the converted base-unit delta, so the log can say "2 oz" instead of "-56.7". |
-| `undone_type` | Set only on `undo` events — which event *kind* this reversed, so macros can tell "undid a purchase" from "undid eating something." |
+| `undone_type` | Set only on `undo` events — which event *kind* this reversed, so macros can tell "undid a purchase" from "undid eating something." Added by `patch-004`; before that this column was documented here but never actually existed, and the client stripped the field on both push and pull, so a second device saw an undo of nothing and kept counting the original consumption. Written at insert time, never patched afterwards — `events` has no `UPDATE` policy, so a later patch could not have synced even in principle. |
 | `timestamp`, `device_id` | `device_id` is audit-only, never used for access control. |
 | `server_updated_at` | Same server-clock rule as `items`. |
 
@@ -133,7 +133,7 @@ they are pure per-browser state.
 
 | Key | Scoped by | Purpose | Consequence of clearing |
 |---|---|---|---|
-| `pantry.llm_api_key` | **browser only** | The user-supplied Gemini API key. | Expiry estimation stops until re-entered. Nothing else affected. |
+| `pantry.llm_api_key` | **browser only** | The user-supplied Gemini API key. | Recipe suggestions and expiry estimation stop until re-entered. Nothing else is affected — adding, weighing, sorting, syncing and receipt scanning never call a model. |
 | `pantry.llm_model` | browser only | Which Gemini model name last worked (models get retired; this avoids re-probing every call). | Falls back to trying the hardcoded list again from the top. |
 | `pantry.household_id` | browser only | Which household this device is currently viewing. | Falls back to the household picker (or auto-selects if the signed-in email has access to exactly one). |
 | `pantry.device_id` | browser only, generated once via `crypto.randomUUID()` | Stamped on outgoing events as `device_id`, **audit-only** — never read for access control or sync logic. | A new one is generated; only cosmetic effect is future events look like they came from a "new" device. |

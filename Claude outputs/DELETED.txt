@@ -1,0 +1,1 @@
+DELETED: src/features/inventory/{treemap.js,LocationCanvas.jsx,canvas.css}

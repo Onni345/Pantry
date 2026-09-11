@@ -135,9 +135,52 @@ export function InventoryProvider({ householdId, children }) {
     [householdId, refresh]
   );
 
+  const updateItem = useCallback(
+    async (itemId, changes) => {
+      await queries.updateItem(householdId, itemId, changes);
+      await refresh();
+      void afterWrite();
+    },
+    [householdId, refresh]
+  );
+
+  const clearAllItems = useCallback(
+    async () => {
+      const count = await queries.clearAllItems(householdId);
+      await refresh();
+      void afterWrite();
+      return count;
+    },
+    [householdId, refresh]
+  );
+
+  // Dev fixture. `import.meta.env.DEV` is false in a production build, so the
+  // whole thing — button, data table and all — is dropped at build time.
+  const loadSample = useCallback(
+    async () => {
+      const { loadSampleFridge } = await import('../dev/sampleFridge.js');
+      const count = await loadSampleFridge(householdId, queries);
+      await refresh();
+      void afterWrite();
+      return count;
+    },
+    [householdId, refresh]
+  );
+
+  const resetIntake = useCallback(
+    async () => {
+      const count = await queries.resetIntake(householdId);
+      await refresh();
+      void afterWrite();
+      return count;
+    },
+    [householdId, refresh]
+  );
+
   const value = {
     ...state, householdId, sync,
-    addItem, logAmount, undoLast, markEmpty, removeItem, refresh,
+    addItem, logAmount, undoLast, markEmpty, removeItem, updateItem, refresh,
+    clearAllItems, resetIntake, loadSample,
     syncNow: () => afterWrite()
   };
   return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;

@@ -57,6 +57,7 @@ export const CATEGORIES = [
   'dairy',
   'meat',
   'seafood',
+  'eggs',
   'grain',
   'canned',
   'frozen',

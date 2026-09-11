@@ -10,6 +10,10 @@
 import { db, EVENT_TYPES } from './schema.js';
 import { getDeviceId } from '../auth/household.js';
 import { toBase, baseUnitFor } from '../units.js';
+// Pure helpers, no Dexie or React of their own. Imported rather than
+// reimplemented so "what counts as eating" has exactly one definition — the
+// intake screen and the intake reset must agree or the reset won't zero it.
+import { consumedGrams, windowStart } from '../features/macros/macros.js';
 
 const now = () => new Date().toISOString();
 
@@ -32,7 +36,15 @@ export async function addItem(householdId, fields) {
     location = 'pantry',
     quantity = 1,
     food_db_id = null,
-    expiry_date = null
+    expiry_date = null,
+    // What one of them weighs, if anyone happens to know. Purely optional:
+    // it buys macros for a counted item ("8 eggs" -> 400 g) and nothing else
+    // depends on it. Absent is a normal, permanent state.
+    grams_each = null,
+    // Optional backdating. Real use always leaves this alone; the sample-fridge
+    // fixture sets it so a seeded kitchen has a believable history rather than
+    // twenty items all bought in the same second.
+    at = null
   } = fields;
 
   const trimmed = String(name || '').trim();
@@ -54,8 +66,9 @@ export async function addItem(householdId, fields) {
     location,
     food_db_id,
     expiry_date,
-    created_at: now(),
-    updated_at: now(),
+    grams_each: grams_each ? Number(grams_each) : null,
+    created_at: at || now(),
+    updated_at: at || now(),
     deleted: 0 // Dexie cannot index booleans; 0/1 keeps `deleted` queryable
   };
 
@@ -71,7 +84,7 @@ export async function addItem(householdId, fields) {
         quantity_delta: converted,
         entered_value: amount,
         entered_unit: unit,
-        timestamp: now(),
+        timestamp: at || now(),
         device_id: getDeviceId()
       }
     : null;
@@ -96,7 +109,7 @@ export async function addItem(householdId, fields) {
  * typed amount is kept alongside, so the log can say "2 oz" rather than
  * "-56.7".
  */
-export async function logAmount(householdId, itemId, { value, unit, direction = 'remove', type }) {
+export async function logAmount(householdId, itemId, { value, unit, direction = 'remove', type, at = null }) {
   const item = await db.items.get(itemId);
   if (!item) throw new Error('Item not found.');
 
@@ -116,7 +129,7 @@ export async function logAmount(householdId, itemId, { value, unit, direction = 
     quantity_delta: signed,
     entered_value: amount,
     entered_unit: unit,
-    timestamp: now(),
+    timestamp: at || now(),
     device_id: getDeviceId()
   };
 
@@ -128,8 +141,15 @@ export async function logAmount(householdId, itemId, { value, unit, direction = 
   return event;
 }
 
-/** Raw base-unit delta. Used internally by markEmpty and undo. */
-export async function logBaseDelta(householdId, itemId, baseDelta, type) {
+/**
+ * Raw base-unit delta. Used internally by markEmpty and undo.
+ *
+ * `extra` is folded into the event before it is written, so anything it adds
+ * (in practice `undone_type`) is part of the row the sync queue captures.
+ * It used to be patched on afterwards, which left the queued payload without
+ * it — the field existed on this device and nowhere else.
+ */
+export async function logBaseDelta(householdId, itemId, baseDelta, type, extra = {}) {
   const amount = Number(baseDelta);
   if (!amount) throw new Error('Delta must be a non-zero number.');
 
@@ -142,7 +162,8 @@ export async function logBaseDelta(householdId, itemId, baseDelta, type) {
     entered_value: null,
     entered_unit: null,
     timestamp: now(),
-    device_id: getDeviceId()
+    device_id: getDeviceId(),
+    ...extra
   };
 
   await db.transaction('rw', db.events, db.pending_sync, async (tx) => {
@@ -195,8 +216,13 @@ export async function listItems(householdId) {
   const macrosById = new Map(foods.map((f) => [f.food_db_id, f.macros_per_unit]));
 
   const totals = new Map();
+  // Everything ever put in, so the UI can say "322 g of the 500 g you bought"
+  // rather than just "322 g" — the same log, read a second way.
+  const added = new Map();
   for (const e of events) {
-    totals.set(e.item_id, (totals.get(e.item_id) || 0) + Number(e.quantity_delta || 0));
+    const delta = Number(e.quantity_delta || 0);
+    totals.set(e.item_id, (totals.get(e.item_id) || 0) + delta);
+    if (delta > 0) added.set(e.item_id, (added.get(e.item_id) || 0) + delta);
   }
 
   return items
@@ -204,6 +230,7 @@ export async function listItems(householdId) {
     .map((i) => ({
       ...i,
       quantity: Math.max(0, totals.get(i.id) || 0),
+      added: added.get(i.id) || 0,
       macros: i.food_db_id ? macrosById.get(i.food_db_id) || null : null
     }))
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
@@ -246,17 +273,103 @@ export async function undoLast(householdId, itemId) {
   const last = events.sort((a, b) => (a.timestamp < b.timestamp ? 1 : -1))[0];
   if (last.type === EVENT_TYPES.UNDO) return null; // don't undo an undo
 
-  const event = await logBaseDelta(
-    householdId, itemId, -Number(last.quantity_delta), EVENT_TYPES.UNDO
+  // `undone_type` records which kind of event this reversed: an undone
+  // removal must cancel the consumption it recorded, an undone addition must
+  // not count as eating. It goes in at creation so the synced row carries it.
+  return logBaseDelta(
+    householdId, itemId, -Number(last.quantity_delta), EVENT_TYPES.UNDO,
+    { undone_type: last.type }
   );
-  // Which kind of event this reversed. An undone removal must cancel the
-  // consumption it recorded; an undone addition must not count as eating.
-  await db.events.update(event.id, { undone_type: last.type });
-  return { ...event, undone_type: last.type };
 }
 
 export function getEventsForItem(itemId) {
   return db.events.where('item_id').equals(itemId).toArray();
+}
+
+/* -------------------------------------------------------------------- resets
+ * Two blunt instruments for getting back to a known state: the fridge is
+ * empty, or today didn't happen. Both go through the normal soft-delete and
+ * append paths rather than wiping rows, so they sync like any other change
+ * and the history stays readable.
+ */
+
+/**
+ * Empties the fridge — soft-deletes every item in the household at once.
+ *
+ * Past intake is unaffected: the events stay, and the intake screen reads
+ * items by id whether or not they are deleted, so what you ate last Tuesday
+ * still counts. This clears what you *have*, not what you *did*.
+ */
+export async function clearAllItems(householdId) {
+  const items = await db.items.where('household_id').equals(householdId).toArray();
+  const live = items.filter((i) => !i.deleted);
+  if (live.length === 0) return 0;
+
+  const stamp = now();
+  await db.transaction('rw', db.items, db.pending_sync, async (tx) => {
+    for (const item of live) {
+      const updated = { ...item, deleted: 1, updated_at: stamp };
+      await tx.table('items').put(updated);
+      await enqueue(tx, 'items', 'update', updated);
+    }
+  });
+
+  return live.length;
+}
+
+/**
+ * Puts intake for the window back to zero.
+ *
+ * Nothing is deleted. For each item it works out what the log says was eaten
+ * in the window — netting out anything already undone, using the same rule
+ * the intake screen uses — and appends a single undo event for that amount.
+ *
+ * Two consequences worth being clear about, both of which follow from
+ * quantity and intake being derived from one log rather than stored apart:
+ *  - The food goes back in the fridge. There is no way to say "I didn't eat
+ *    this" without also saying "so it's still there".
+ *  - Pressing it twice is harmless. The second press nets zero and appends
+ *    nothing, so a double tap can't inflate the fridge.
+ */
+export async function resetIntake(householdId, { days = 1, now: at = new Date() } = {}) {
+  const from = windowStart(days, at).getTime();
+  const events = await db.events.where('household_id').equals(householdId).toArray();
+
+  const netByItem = new Map();
+  for (const e of events) {
+    const ts = Date.parse(e.timestamp);
+    if (!Number.isFinite(ts) || ts < from) continue;
+    const grams = consumedGrams(e);
+    if (grams === 0) continue;
+    netByItem.set(e.item_id, (netByItem.get(e.item_id) || 0) + grams);
+  }
+
+  const outstanding = [...netByItem.entries()].filter(([, net]) => net > 0);
+
+  for (const [itemId, net] of outstanding) {
+    await logBaseDelta(householdId, itemId, net, EVENT_TYPES.UNDO, {
+      undone_type: EVENT_TYPES.REMOVE
+    });
+  }
+
+  return outstanding.length;
+}
+
+/**
+ * Distinct things this household has bought before, newest first — what
+ * "Add from recent" offers. Reads deleted items too: finishing the milk is
+ * exactly when it becomes worth re-adding.
+ */
+export async function recentNames(householdId, limit = 24) {
+  const items = await db.items.where('household_id').equals(householdId).toArray();
+  const seen = new Map();
+  for (const i of [...items].sort((a, b) => (a.created_at < b.created_at ? 1 : -1))) {
+    const key = i.name.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.set(key, { name: i.name, unit: i.display_unit || 'item', location: i.location });
+    if (seen.size >= limit) break;
+  }
+  return [...seen.values()];
 }
 
 /** Debug helper — how many writes are waiting for the sync layer. */

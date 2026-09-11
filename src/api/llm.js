@@ -149,9 +149,8 @@ async function requestOnce(model, parts, schema, maxOutputTokens, signal) {
 
 /**
  * Runs a structured-output request against Gemini, trying MODELS in order
- * until one answers. Shared by shelf-life estimation, recipe suggestions and
- * receipt scanning so all three get the same model-fallback and error
- * handling for free.
+ * until one answers. Shared by shelf-life estimation and recipe suggestions
+ * so both get the same model-fallback and error handling for free.
  *
  * `parts` is a Gemini "parts" array — `[{ text }]` for a plain prompt, or
  * `[{ text }, { inlineData: { mimeType, data } }]` to attach an image. A bare
@@ -287,19 +286,8 @@ export async function suggestRecipes(items, { signal } = {}) {
   return parseRecipes(text, stock);
 }
 
-/**
- * Reads a photographed/uploaded grocery receipt and returns editable staging
- * rows (see features/receipts/receipts.js) — never writes to inventory
- * itself. No cache: a receipt is a one-time read, not a lookup key that
- * recurs the way a food name or a stock snapshot does.
- *
- * `imageBase64` is raw base64 (no `data:` prefix); `mimeType` e.g. `image/jpeg`.
- */
-export async function scanReceipt(imageBase64, mimeType, { signal } = {}) {
-  const { buildReceiptPrompt, parseReceiptItems } = await import('../features/receipts/receipts.js');
-  const { prompt, schema } = buildReceiptPrompt();
-
-  const parts = [{ text: prompt }, { inlineData: { mimeType, data: imageBase64 } }];
-  const text = await callGeminiJSON(parts, schema, { maxOutputTokens: 2000, signal });
-  return parseReceiptItems(text);
-}
+// Receipt scanning used to live here, asking Gemini to tidy up item names.
+// It no longer calls a model at all — see features/receipts/receipts.js
+// (`expandReceiptName`). Reading a receipt is clerical work with a right
+// answer, so a lookup table does it: no quota, no key, no network, and the
+// same result every time.

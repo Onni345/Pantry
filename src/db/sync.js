@@ -77,7 +77,11 @@ const eventToRemote = (e) => ({
   entered_value: e.entered_value ?? null,
   entered_unit: e.entered_unit ?? null,
   timestamp: e.timestamp,
-  device_id: e.device_id ?? null
+  device_id: e.device_id ?? null,
+  // Which kind of event an undo reversed. Without this the intake maths on
+  // another device cannot tell "I didn't eat that after all" from "I didn't
+  // buy that after all" — see supabase/patch-004-undone-type.sql.
+  undone_type: e.undone_type ?? null
 });
 
 const eventToLocal = (r) => ({
@@ -89,7 +93,8 @@ const eventToLocal = (r) => ({
   entered_value: r.entered_value == null ? null : Number(r.entered_value),
   entered_unit: r.entered_unit,
   timestamp: r.timestamp,
-  device_id: r.device_id
+  device_id: r.device_id,
+  undone_type: r.undone_type ?? null
 });
 
 /* -------------------------------------------------------------------- push */

@@ -7,18 +7,22 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "smoke": "node scripts/smoke-render.mjs"
+    "smoke": "node scripts/smoke-render.mjs",
+    "screens": "node scripts/screens.mjs",
+    "sample-sql": "node scripts/sample-fridge-sql.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",
     "dexie": "^4.0.8",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
+    "fake-indexeddb": "^6.0.0",
+    "playwright": "^1.63.0",
     "vite": "^5.4.0",
-    "vite-plugin-pwa": "^0.20.5",
-    "fake-indexeddb": "^6.0.0"
+    "vite-plugin-pwa": "^0.20.5"
   }
 }

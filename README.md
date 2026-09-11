@@ -23,6 +23,13 @@ npm run dev              # http://localhost:5173
 The Gemini key is **not** an env var — it's entered in the app itself (Settings), per device,
 per browser. See "Where things are stored" below for why.
 
+It is also **optional**, and deliberately narrow in scope. A model is used for recipe
+ideas (a creative task with no right answer) and shelf-life estimates. Nothing that makes
+the app *run* depends on one: adding, weighing, sorting, syncing, and reading a receipt
+are all plain code, and work offline with no key and no quota. If you're adding a feature,
+that's the line to hold — if the task has a right answer you could look up or compute,
+compute it.
+
 ```bash
 npm run build      # production build -> dist/
 npm run preview    # serve the production build locally
@@ -45,6 +52,7 @@ folder for the shape those took.
 
 | Script | What it does |
 |---|---|
+| `screens.mjs` (`npm run screens`) | Renders every screen to a PNG at phone (390px) and laptop (1000px) widths into `screens/`. `npm run smoke` proves a screen doesn't crash; this proves it doesn't look broken — a clipped number or a wrapped field is invisible to a render test and obvious in a picture. |
 | `rls-test.mjs` | Spins up two throwaway anonymous-ish sessions against your real Supabase project and checks cross-household reads/writes are actually refused by Postgres, not just unrequested by the app. Reads `.env`. |
 | `food-lookup-probe.mjs` | Runs a real USDA + Open Food Facts search through the app's own ranking/dedupe/plausibility code and prints what survives. Useful after touching `foodQuality.js`. |
 | `gemini-probe.mjs <key>` | Lists every model your Gemini key can call, then live-tests each candidate with the actual structured-output schema the app uses. Run this whenever expiry estimation starts 404ing — Google renames/retires models on its own schedule. |
@@ -57,9 +65,57 @@ node scripts/gemini-probe.mjs AIza...
 
 ## Deleting / resetting data while developing
 
-Two layers: **server** (Supabase — shared, authoritative) and **local** (IndexedDB in
-each browser — a cache/staging area for offline writes). Deleting one does not touch
-the other.
+### A known kitchen to work against (Settings → Development)
+
+In `npm run dev` only, Settings grows a **Load sample kitchen** button: 20 items
+across fridge, freezer and pantry, spread over dairy / meat / grains / produce and
+across the macro axes (butter and bacon at the fat end, chicken and yogurt at the
+protein end, rice and pasta at the carb end). It includes the awkward cases on
+purpose — one expired item, one finished, counted items alongside weighed ones,
+varied depletion — plus a day's intake already logged, so the Intake tab isn't
+empty either.
+
+Edit the list in `src/dev/sampleFridge.js`. One table feeds three things: the
+button, the screenshot harness, and the SQL seed — so they can't drift.
+
+It **replaces** what's there. That's the point: somewhere known to come back to.
+`import.meta.env.DEV` gates it, so the button and the data are dropped from a
+production build entirely.
+
+**Seeding the server instead** (so a phone or a family member's device pulls the
+sample down without dev tools):
+
+```bash
+npm run sample-sql     # regenerates supabase/sample-fridge.sql from the table
+```
+
+Then paste that file into the Supabase SQL editor, changing the household id on
+the first line to yours. It's re-runnable — it clears its own rows first, and only
+its own. One caveat: macros live in `food_cache`, which is per-device IndexedDB
+and never syncs, so SQL-seeded items arrive without nutrition. Use the button if
+you want macros.
+
+### In the app (Settings → Reset)
+
+For everyday "get me back to a clean slate," two buttons cover most of it, and both
+sync to every device like any other change — no devtools, no SQL:
+
+| Button | What it does | What it leaves alone |
+|---|---|---|
+| **Empty the fridge** | Soft-deletes every item in the household | All history. What you've already eaten still counts toward intake |
+| **Undo today's intake** | Nets out what today's log says was eaten and appends one undo per item, putting intake back to zero | Earlier days. Safe to press twice — the second press nets zero and does nothing |
+
+"Undo today's intake" also puts the food **back in the fridge**. That isn't a quirk to
+work around: quantity and intake are both derived from the same event log, so there is
+no way to say "I didn't eat this" without also saying "so it's still there."
+
+Neither button wipes rows — items are soft-deleted and intake is reversed by appending,
+so nothing below is needed unless you want the history itself gone.
+
+### The two storage layers
+
+**Server** (Supabase — shared, authoritative) and **local** (IndexedDB in each browser —
+a cache/staging area for offline writes). Deleting one does not touch the other.
 
 ### Server-side, via Supabase Table Editor / SQL Editor
 

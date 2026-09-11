@@ -1,93 +1,104 @@
 /**
- * Receipt scanning: prompt building and response validation.
- *
- * Pure — no fetch, no Dexie, no React, no food-database lookup. `scanReceipt`
- * (in ../../api/llm.js) does the network call to Gemini; food matching is a
- * separate network call the component drives (see ReceiptScan.jsx). This
- * module only decides what to ask for and what shape a "staged" line item
- * takes before either of those touch it.
+ * Receipt OCR text -> staging rows. Pure: no fetch, no Dexie, no React, no
+ * model call. Three regexes find the priced lines, and one substring rule
+ * decides whether a food-database hit is really the same food.
  */
 import { KNOWN_UNITS } from '../../units.js';
+import { titleCase } from '../../api/foodQuality.js';
 
-const RESPONSE_SCHEMA = {
-  type: 'object',
-  properties: {
-    items: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          name: { type: 'string' },
-          quantity: { type: 'number', nullable: true },
-          unit: { type: 'string', nullable: true },
-          price: { type: 'number', nullable: true }
-        },
-        required: ['name']
-      }
-    }
-  },
-  required: ['items']
-};
+// Lines that are exactly one of these (no other text) are not a purchased
+// item, even though they end in a price — a subtotal, a tax line, or a
+// "SPECIAL" discount marker that most grocery receipts print as its own
+// line under the item it discounts. Matched against the *whole* line text
+// preceding the price, so "GRAPES GREEN" a few lines away is untouched.
+const NON_ITEM_LINE = /^(sub ?total|total|tax|gst|vat|cash|change|balance( due)?|discount|special|promo|markdown|round(ing)?|tender|approved|eftpos|visa|mastercard|debit|credit|loyalty|rewards?|savings?)$/i;
 
-const PROMPT = `This image is a grocery store receipt. Extract every purchased food or
-grocery line item. Skip subtotals, tax, totals, loyalty/rewards messages, coupons, and
-non-food lines (bag fees, gift cards, and similar).
+// "0.778kg NET @ $5.99/kg" — the weight sub-line grocery receipts print
+// directly under a weighed item's name/price line. Exact, structured data
+// once you know the pattern, so it is read rather than interpreted: a
+// weighed item's quantity comes straight off the receipt.
+const WEIGHT_SUBLINE = /^([\d.]+)\s*(kg|g|lb|oz)\s*net\b/i;
 
-For each item give:
-- name: a plain, searchable food name (expand obvious abbreviations, e.g. "ORG BANANA" -> "Organic Banana")
-- quantity: the number of units or weight bought, if printed (just the number, no unit)
-- unit: a short unit word if you can tell one ("g", "kg", "lb", "oz", or "count"), omit if unclear
-- price: the line price, if printed (just the number, no currency symbol)
+// A line ending in a price: some name text, then an optional minus sign
+// (for a "-15.00" discount line) and a decimal amount, right at line end.
+const PRICE_LINE = /^(.+?)\s+-?\$?\s?(\d+\.\d{2})\s*$/;
 
-Reply as JSON matching the given schema. If the image is not a readable receipt, return
-an empty items array rather than guessing.`;
-
-export function buildReceiptPrompt() {
-  return { prompt: PROMPT, schema: RESPONSE_SCHEMA };
+function normalizeUnit(u) {
+  const n = String(u || '').toLowerCase();
+  return KNOWN_UNITS.has(n) ? n : 'count';
 }
 
 /**
- * Validates the model's answer and shapes it into editable staging rows.
- *
- * A receipt read is a starting point, not a fact: every row is meant to sit
- * in an editable list the user confirms before anything reaches inventory,
- * so this is about discarding garbage (empty names, non-finite numbers)
- * rather than rejecting anything borderline the way parseRecipes does — a
- * wrong guess here just becomes a row the user corrects, not a silent write.
+ * Every price-bearing line in the OCR text, deterministically — the
+ * candidate list nothing downstream is allowed to shrink. `rawName` is
+ * whatever text preceded the price, unmodified; `toRows` tidies it into a
+ * display name, but every candidate here becomes exactly one staged row.
  */
-export function parseReceiptItems(raw) {
-  let data = raw;
-  if (typeof raw === 'string') {
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('No JSON object in the response.');
-    data = JSON.parse(match[0]);
-  }
-  if (!data || !Array.isArray(data.items)) {
-    throw new Error('Response had no items array.');
-  }
+export function extractCandidateLines(ocrText) {
+  const lines = String(ocrText || '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
 
-  const out = [];
-  for (const entry of data.items) {
-    const name = String(entry?.name || '').trim();
-    if (!name) continue;
+  const candidates = [];
 
-    const qty = Number(entry?.quantity);
-    const price = Number(entry?.price);
-    const unit = String(entry?.unit || '').trim().toLowerCase();
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (WEIGHT_SUBLINE.test(line)) continue; // consumed by the item above, not its own row
 
-    out.push({
-      id: crypto.randomUUID(),
-      rawName: name,
-      name,
-      quantity: Number.isFinite(qty) && qty > 0 ? qty : 1,
-      unit: KNOWN_UNITS.has(unit) ? unit : 'count',
-      price: Number.isFinite(price) && price >= 0 ? price : null,
-      include: true,
-      matchStatus: 'searching', // set to 'searching' as soon as staged; the
-      matchedFood: null          // component kicks off the lookup right away
+    const m = PRICE_LINE.exec(line);
+    if (!m) continue;
+
+    const rawName = m[1].trim();
+    const price = Number(m[2]);
+    if (!rawName || !Number.isFinite(price) || NON_ITEM_LINE.test(rawName)) continue;
+
+    const weightLine = WEIGHT_SUBLINE.exec(lines[i + 1] || '');
+
+    candidates.push({
+      rawName,
+      price,
+      quantity: weightLine ? Number(weightLine[1]) : 1,
+      unit: weightLine ? normalizeUnit(weightLine[2]) : 'count'
     });
   }
-  return out;
+
+  return candidates;
+}
+
+/**
+ * Builds the final staging rows from the candidate list — one row per
+ * candidate, always. Nothing here can shrink the list or fail: name
+ * expansion is a pure table lookup, so a receipt stages the same way with
+ * no network, no API key, and no quota left.
+ */
+export function toRows(candidates) {
+  return candidates.map((c) => ({
+    id: crypto.randomUUID(),
+    rawName: c.rawName,
+    name: titleCase(c.rawName),
+    quantity: c.quantity,
+    unit: c.unit,
+    price: c.price,
+    include: true,
+    matchStatus: 'searching', // the component kicks off a food-lookup right away
+    matchedFood: null
+  }));
+}
+
+/**
+ * Is this lookup result plausibly the same food as the receipt line?
+ *
+ * One rule: the first real word off the receipt has to appear in the food's
+ * name. That's it. "GRAPES GREEN" won't match "Beet greens, raw", and
+ * "BROCCOLI" will match "Broccoli, leaves, raw" — which is the whole job.
+ * A miss just means that item carries no macros, which is a fine outcome;
+ * a wrong match is not, because it gets believed.
+ */
+export function acceptFoodMatch(queryName, food) {
+  const first = String(queryName || '').toLowerCase().match(/[a-z]{3,}/)?.[0];
+  if (!first || !food?.name) return false;
+  return food.name.toLowerCase().includes(first);
 }
 
 /**

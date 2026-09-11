@@ -5,16 +5,26 @@
   --space-3: 16px;
   --space-4: 24px;
 
-  /* Palette: three grays + one accent */
-  --ink: #1f1f1f;
-  --muted: #6b6b6b;
-  --line: #e0e0e0;
-  --surface: #ffffff;
-  --bg: #fafafa;
-  --accent: #2f6f4f;
-  --danger: #a33;
+  /* Warm paper rather than cold white — this is a larder, not a dashboard.
+     Three neutrals, one accent, and three location hues that carry meaning
+     rather than decorate. */
+  --ink: #23201b;
+  --muted: #6f695e;
+  --line: #e3ddd1;
+  --surface: #fffdf8;
+  --bg: #f4f1e9;
+  --accent: #4a6136;      /* herb green */
+  --danger: #9c3328;
+  --warn: #8a5a00;        /* expiring within 2 days */
 
-  --radius: 6px;
+  /* Where a thing lives, as colour. Cold, colder, dry — so the eye can sort
+     the list before the words are read. Used as a 3px edge on a shelf, never
+     as a fill. */
+  --loc-fridge: #2f6b73;
+  --loc-freezer: #3f5d8a;
+  --loc-pantry: #8a5a2b;
+
+  --radius: 5px;
   --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
@@ -34,6 +44,10 @@ body {
 
 h1, h2, h3 { font-weight: 700; margin: 0; }
 p { margin: 0; }
+
+/* Quantities, dates and prices are read by comparing them down a column, so
+   they get fixed-width figures everywhere. */
+.qty-value, .receipt-price, .receipt-qty, .macro-value { font-variant-numeric: tabular-nums; }
 
 button {
   font: inherit;
@@ -86,3 +100,30 @@ input:focus, select:focus, button:focus-visible {
 .stack { display: flex; flex-direction: column; gap: var(--space-3); }
 .stack-tight { display: flex; flex-direction: column; gap: var(--space-2); }
 .row { display: flex; gap: var(--space-2); align-items: center; }
+
+/*
+ * Canvas tones. Muted rather than candy-pastel, so they sit on the paper
+ * ground rather than floating above it, and dark enough to carry text at
+ * normal weight. One per bucket across all three lenses.
+ */
+:root {
+  --tone-protein: #dcc3ba;          /* clay */
+  --tone-produce: #c8d7b4;          /* sage */
+  --tone-dairy: #eae2ca;            /* cream */
+  --tone-grains: #e0cba4;           /* wheat */
+  --tone-frozen: #c3d5de;           /* ice */
+  --tone-pantry-staples: #d5c9b6;
+  --tone-snacks: #e0ccd2;
+  --tone-drinks: #c6d4d2;
+  --tone-other: #d9d5cc;
+
+  --tone-carbs: #e0cba4;            /* wheat, as in grains */
+  --tone-fat: #dfd3a3;              /* gold — far enough from wheat to read */
+  --tone-unknown: #d9d5cc;
+
+  --tone-past-date: #ddbdb6;
+  --tone-use-now: #ecd5a8;
+  --tone-this-week: #ddd9c0;
+  --tone-keeps: #c8d7b4;
+  --tone-no-date: #d9d5cc;
+}

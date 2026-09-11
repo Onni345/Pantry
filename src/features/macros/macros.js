@@ -11,9 +11,11 @@
  *   undo                -> only if it reversed one of the first two, in which
  *                          case it cancels that consumption out again
  *
- * Only weighed items can contribute. Macros are published per 100 g, and the
- * app has no way to know what three eggs weigh, so counted items are reported
- * separately rather than guessed at.
+ * Macros are published per 100 g. A weighed item converts directly; a counted
+ * one converts only if someone recorded what a single unit weighs
+ * (`grams_each`). Counted items without that figure are reported separately
+ * rather than guessed at — the app would rather show honest coverage than a
+ * total built on an invented number.
  */
 
 export const CONSUMPTION_TYPES = new Set(['remove', 'consumed_remainder']);
@@ -73,22 +75,26 @@ export function summarize({ items, events, foods }, { days = 1, now = new Date()
     const item = itemsById.get(e.item_id);
     if (!item) continue;
 
+    // A counted item can still contribute if anyone recorded what one of
+    // them weighs — "2 eggs" becomes 100 g. Without that figure it is
+    // reported as uncounted rather than guessed at.
+    let asGrams = grams;
     if (item.base_unit !== 'g') {
-      countedUnits += grams;
-      continue;
+      if (!item.grams_each) { countedUnits += grams; continue; }
+      asGrams = grams * Number(item.grams_each);
     }
 
     const macros = item.food_db_id ? macrosById.get(item.food_db_id) : null;
     if (!macros) {
-      gramsUnmatched += grams;
+      gramsUnmatched += asGrams;
       continue;
     }
 
-    gramsCounted += grams;
-    const factor = grams / 100;
+    gramsCounted += asGrams;
+    const factor = asGrams / 100;
 
     const row = perItem.get(item.id) || { id: item.id, name: item.name, grams: 0, ...EMPTY };
-    row.grams += grams;
+    row.grams += asGrams;
 
     for (const key of ['calories', 'protein_g', 'carbs_g', 'fat_g']) {
       const v = Number(macros[key]);

@@ -107,7 +107,10 @@ export default function App() {
     <InventoryProvider householdId={householdId}>
       <div className="shell stack">
         <header className="app-header">
-          <h1>{current?.name || 'Pantry'}</h1>
+          <div>
+            <span className="wordmark">Pantry</span>
+            <h1>{current?.name || 'Your kitchen'}</h1>
+          </div>
           <div className="row">
             <SyncStatus />
             <button className="link-button" onClick={() => setShowSettings((v) => !v)}>
@@ -128,15 +131,18 @@ export default function App() {
         )}
 
         <nav className="tabs row">
-          <button className={tab === 'inventory' ? 'primary' : ''} onClick={() => setTab('inventory')}>
-            Inventory
-          </button>
-          <button className={tab === 'macros' ? 'primary' : ''} onClick={() => setTab('macros')}>
-            Intake
-          </button>
-          <button className={tab === 'recipes' ? 'primary' : ''} onClick={() => setTab('recipes')}>
-            Recipes
-          </button>
+          {[['inventory', 'Kitchen'], ['macros', 'Intake'], ['recipes', 'Recipes']].map(
+            ([key, label]) => (
+              <button
+                key={key}
+                className={tab === key ? 'is-current' : ''}
+                aria-current={tab === key ? 'page' : undefined}
+                onClick={() => setTab(key)}
+              >
+                {label}
+              </button>
+            )
+          )}
         </nav>
 
         {tab === 'inventory' && <InventoryList />}
