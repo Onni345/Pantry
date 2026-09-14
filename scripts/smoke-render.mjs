@@ -169,6 +169,9 @@ check('settings panel', () =>
     onSwitch() {}, onClose() {}
   }))));
 
-await server.close();
+// esbuild logs "The build was canceled" when Vite's dev server is torn down
+// while a transform is still in flight. It is teardown noise, not a failure,
+// and printing it under thirty PASS lines makes a green run look broken.
+await server.close().catch(() => {});
 console.log(`\n${failures ? `${failures} screen(s) failed to render` : 'all screens rendered'}`);
 process.exit(failures ? 1 : 0);

@@ -1,8 +1,0 @@
-/* A count and a named portion, side by side. The count is narrow because it
-   is almost always one or two digits; the portion name needs the room. */
-.serving-row { display: grid; grid-template-columns: 4.5rem 1fr; gap: var(--space-2); }
-.serving-row input { text-align: center; font-variant-numeric: tabular-nums; }
-.serving-row input::-webkit-outer-spin-button,
-.serving-row input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.serving-row input { -moz-appearance: textfield; appearance: textfield; }
-.serving-picker > .label:last-child { font-variant-numeric: tabular-nums; }

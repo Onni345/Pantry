@@ -4,3 +4,8 @@ dist
 .DS_Store
 dev-dist
 screens/
+
+# Where the Claude desktop app drops files it delivers into the chat. They are
+# copies of files that already live in src/ and scripts/, so committing them
+# duplicates the repo inside itself.
+Claude outputs/
