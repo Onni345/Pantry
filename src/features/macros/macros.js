@@ -18,6 +18,8 @@
  * total built on an invented number.
  */
 
+import { gramsPerUnit } from '../inventory/amounts.js';
+
 export const CONSUMPTION_TYPES = new Set(['remove', 'consumed_remainder']);
 
 export const RANGES = [
@@ -76,12 +78,15 @@ export function summarize({ items, events, foods }, { days = 1, now = new Date()
     if (!item) continue;
 
     // A counted item can still contribute if anyone recorded what one of
-    // them weighs — "2 eggs" becomes 100 g. Without that figure it is
-    // reported as uncounted rather than guessed at.
+    // them weighs — "2 eggs" becomes 100 g, and one jar becomes the jar's
+    // 454 g. That question has exactly one answer in this codebase and it
+    // lives in amounts.js; asking item.grams_each directly here is how a jar
+    // with a recorded package weight silently scored zero calories.
     let asGrams = grams;
     if (item.base_unit !== 'g') {
-      if (!item.grams_each) { countedUnits += grams; continue; }
-      asGrams = grams * Number(item.grams_each);
+      const per = gramsPerUnit(item);
+      if (!per) { countedUnits += grams; continue; }
+      asGrams = grams * per;
     }
 
     const macros = item.food_db_id ? macrosById.get(item.food_db_id) : null;

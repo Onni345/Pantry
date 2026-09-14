@@ -10,6 +10,7 @@
 import { db, EVENT_TYPES } from './schema.js';
 import { getDeviceId } from '../auth/household.js';
 import { toBase, baseUnitFor } from '../units.js';
+import { gramsToDelta } from '../features/inventory/amounts.js';
 // Pure helpers, no Dexie or React of their own. Imported rather than
 // reimplemented so "what counts as eating" has exactly one definition — the
 // intake screen and the intake reset must agree or the reset won't zero it.
@@ -41,6 +42,11 @@ export async function addItem(householdId, fields) {
     // it buys macros for a counted item ("8 eggs" -> 400 g) and nothing else
     // depends on it. Absent is a normal, permanent state.
     grams_each = null,
+    // What one whole package weighs — a 454 g jar, a 5 lb bag. Settable on
+    // any product, which is what lets per-100 g macros scale to the thing
+    // actually in the cupboard rather than to a serving size someone else
+    // chose. Also what makes "26% of the jar" sayable.
+    pack_grams = null,
     // Optional backdating. Real use always leaves this alone; the sample-fridge
     // fixture sets it so a seeded kitchen has a believable history rather than
     // twenty items all bought in the same second.
@@ -67,6 +73,7 @@ export async function addItem(householdId, fields) {
     food_db_id,
     expiry_date,
     grams_each: grams_each ? Number(grams_each) : null,
+    pack_grams: pack_grams ? Number(pack_grams) : null,
     created_at: at || now(),
     updated_at: at || now(),
     deleted: 0 // Dexie cannot index booleans; 0/1 keeps `deleted` queryable
@@ -109,9 +116,26 @@ export async function addItem(householdId, fields) {
  * typed amount is kept alongside, so the log can say "2 oz" rather than
  * "-56.7".
  */
-export async function logAmount(householdId, itemId, { value, unit, direction = 'remove', type, at = null }) {
+export async function logAmount(
+  householdId, itemId, { value, unit, grams, direction = 'remove', type, at = null }
+) {
   const item = await db.items.get(itemId);
   if (!item) throw new Error('Item not found.');
+
+  // Grams are accepted for any item whose weight is known, whatever it is
+  // counted in — that is what lets a jar counted as "1 jar" give up a 32 g
+  // spoonful and come back reading "93% of the jar".
+  if (grams != null) {
+    const delta = gramsToDelta(item, grams);
+    if (delta == null) {
+      throw new Error('This item has no recorded weight, so it cannot be used by the gram.');
+    }
+    return logBaseDelta(
+      householdId, itemId, direction === 'add' ? delta : -delta,
+      type || (direction === 'add' ? EVENT_TYPES.ADD : EVENT_TYPES.REMOVE),
+      { entered_value: Number(grams), entered_unit: 'g' }
+    );
+  }
 
   const amount = Number(value);
   if (!Number.isFinite(amount) || amount <= 0) {
@@ -149,7 +173,7 @@ export async function logAmount(householdId, itemId, { value, unit, direction = 
  * It used to be patched on afterwards, which left the queued payload without
  * it — the field existed on this device and nowhere else.
  */
-export async function logBaseDelta(householdId, itemId, baseDelta, type, extra = {}) {
+async function logBaseDelta(householdId, itemId, baseDelta, type, extra = {}) {
   const amount = Number(baseDelta);
   if (!amount) throw new Error('Delta must be a non-zero number.');
 
@@ -236,12 +260,6 @@ export async function listItems(householdId) {
     .sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
 }
 
-/** Current quantity for one item, derived the same way listItems derives it. */
-export async function getQuantity(itemId) {
-  const events = await db.events.where('item_id').equals(itemId).toArray();
-  const total = events.reduce((sum, e) => sum + Number(e.quantity_delta || 0), 0);
-  return Math.max(0, total);
-}
 
 /**
  * "I finished it" — the drift correction.
@@ -282,9 +300,6 @@ export async function undoLast(householdId, itemId) {
   );
 }
 
-export function getEventsForItem(itemId) {
-  return db.events.where('item_id').equals(itemId).toArray();
-}
 
 /* -------------------------------------------------------------------- resets
  * Two blunt instruments for getting back to a known state: the fridge is
@@ -372,10 +387,6 @@ export async function recentNames(householdId, limit = 24) {
   return [...seen.values()];
 }
 
-/** Debug helper — how many writes are waiting for the sync layer. */
-export function pendingSyncCount() {
-  return db.pending_sync.count();
-}
 
 /** Everything the macro summary needs, in one read. */
 export async function getMacroInputs(householdId) {

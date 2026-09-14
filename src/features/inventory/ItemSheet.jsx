@@ -4,9 +4,13 @@ import { getCachedFood } from '../../api/foodLookup.js';
 import { gramsPerUnit, servingsFor, defaultServing } from '../../api/portion.js';
 import { loadServings } from '../../api/foodLookup.js';
 import ServingPicker from '../../components/ServingPicker.jsx';
+import PackSize from '../../components/PackSize.jsx';
+import '../../components/PackSize.css';
 import FoodSearchSheet from '../../components/FoodSearchSheet.jsx';
 import { perUnit, inStock, macroGap, formatCalories } from '../../features/macros/perItem.js';
-import { describe, niceNumber, pluralize } from '../../units.js';
+import { niceNumber, pluralize } from '../../units.js';
+import { describe, portionsFor, gramsToDelta, supportsGrams, nounOf } from './amounts.js';
+import { formatGrams } from '../../units.js';
 import { CATEGORIES, LOCATIONS } from '../../db/schema.js';
 import './sheet.css';
 
@@ -20,15 +24,12 @@ import './sheet.css';
 export default function ItemSheet({ item, onClose }) {
   const { logAmount, markEmpty, undoLast, removeItem } = useInventory();
   const [busy, setBusy] = useState(false);
-  const [custom, setCustom] = useState('');
   const [details, setDetails] = useState(false);
   const [undoable, setUndoable] = useState(false);
   const [food, setFood] = useState(null);
-  const [serving, setServing] = useState(null);
 
   const counted = item.base_unit !== 'g';
   const noun = counted && item.display_unit !== 'count' ? item.display_unit : 'item';
-  const step = counted ? 1 : 50;
 
   // A weighed item with known portions can be logged by the portion instead
   // of by the gram — "1 slice", not "−50 g". Counted items already read in
@@ -48,6 +49,7 @@ export default function ItemSheet({ item, onClose }) {
   }, [counted, item.food_db_id, item.display_unit]);
 
   const portions = servingsFor(food);
+  const amount = describe(item);
 
   async function run(fn, { undo = true } = {}) {
     if (busy) return;
@@ -59,15 +61,6 @@ export default function ItemSheet({ item, onClose }) {
       setBusy(false);
     }
   }
-
-  const consume = (value) =>
-    run(() => logAmount(item.id, { value, unit: counted ? 'count' : 'g', direction: 'remove' }));
-  const restock = (value) =>
-    run(() => logAmount(item.id, { value, unit: counted ? 'count' : 'g', direction: 'add' }));
-
-  // Quick amounts that mean something for this item rather than fixed numbers:
-  // half of what's left, and all of it.
-  const half = Math.round((item.quantity / 2) * 100) / 100;
 
   return (
     <div className="sheet-backdrop" onClick={onClose}>
@@ -83,76 +76,22 @@ export default function ItemSheet({ item, onClose }) {
         </div>
 
         <p className="sheet-qty">
-          {describe(item)}
+          {amount.main}
+          {amount.aside && <span className="label muted"> · {amount.aside}</span>}
           {item.quantity === 0 && <span className="label muted"> · all gone</span>}
         </p>
 
         <Nutrition item={item} onFix={() => setDetails(true)} />
 
-        <div className="row sheet-step">
-          <button onClick={() => consume(step)} disabled={busy || item.quantity <= 0}>
-            −{counted ? 1 : `${step}g`}
-          </button>
-          <button onClick={() => restock(step)} disabled={busy}>
-            +{counted ? 1 : `${step}g`}
-          </button>
-        </div>
-
-        <div className="row wrap sheet-quick">
-          {item.quantity > 0 && half > 0 && (
-            <button onClick={() => consume(half)} disabled={busy}>
-              Used half ({niceNumber(half)} {counted ? pluralize(noun, half) : 'g'})
-            </button>
-          )}
-          {item.quantity > 0 && (
-            <button onClick={() => run(() => markEmpty(item.id))} disabled={busy}>
-              Finished it
-            </button>
-          )}
-        </div>
-
-        {portions.length > 0 ? (
-          <form
-            className="stack-tight sheet-portion"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const n = Number(custom);
-              const grams = (serving?.grams || 0) * n;
-              if (grams > 0) { consume(grams); setCustom(''); }
-            }}
-          >
-            <ServingPicker
-              food={food}
-              quantity={custom}
-              serving={serving}
-              onQuantity={setCustom}
-              onServing={setServing}
-              label="Used"
-            />
-            <button type="submit" disabled={busy || !(Number(custom) > 0)}>Log it</button>
-          </form>
-        ) : (
-          <form
-            className="row sheet-custom"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const v = Number(custom);
-              if (v > 0) { consume(v); setCustom(''); }
-            }}
-          >
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="any"
-              value={custom}
-              onChange={(e) => setCustom(e.target.value)}
-              placeholder={counted ? `Used how many ${pluralize(noun, 2)}?` : 'Used how many grams?'}
-              aria-label="Custom amount used"
-            />
-            <button type="submit" disabled={busy || !(Number(custom) > 0)}>Use</button>
-          </form>
-        )}
+        <Take
+          item={item}
+          food={food}
+          busy={busy}
+          onTakeGrams={(g) => run(() => logAmount(item.id, { grams: g, direction: 'remove' }))}
+          onTakeUnits={(n) => run(() => logAmount(item.id, { value: n, unit: 'count', direction: 'remove' }))}
+          onAddUnits={(n) => run(() => logAmount(item.id, { value: n, unit: 'count', direction: 'add' }))}
+          onFinish={() => run(() => markEmpty(item.id))}
+        />
 
         {undoable && (
           <div className="row sheet-undo">
@@ -173,6 +112,89 @@ export default function ItemSheet({ item, onClose }) {
 
         {details && <Details item={item} onDone={onClose} removeItem={removeItem} />}
       </div>
+    </div>
+  );
+}
+
+
+/**
+ * Taking some.
+ *
+ * Both ways, always, on every item — a row of named portions and a gram
+ * field. The app deliberately does not try to guess whether a thing divides:
+ * guessing that a potato is whole-only is right until someone grates one, and
+ * a wrong guess is a dead end where showing both is one extra chip.
+ *
+ * The portions are the loud part because they are the common case. Grams sit
+ * underneath, quiet, for when the chips don't fit what you did.
+ */
+function Take({ item, food, busy, onTakeGrams, onTakeUnits, onAddUnits, onFinish }) {
+  const [grams, setGrams] = useState('');
+  const portions = portionsFor(item, food);
+  const canGrams = supportsGrams(item);
+  const noun = nounOf(item) || 'item';
+  const empty = item.quantity <= 0;
+
+  return (
+    <div className="stack-tight take">
+      <div className="row take-step">
+        <button
+          onClick={() => onTakeUnits(1)}
+          disabled={busy || empty}
+          aria-label={`Take one ${noun}`}
+        >
+          &minus;1 {noun}
+        </button>
+        <button onClick={() => onAddUnits(1)} disabled={busy} aria-label={`Add one ${noun}`}>
+          +1 {noun}
+        </button>
+      </div>
+
+      {portions.length > 0 && (
+        <div className="row wrap take-portions">
+          {portions.map((p) => (
+            <button
+              key={p.label}
+              className="chip"
+              disabled={busy || empty || !p.grams}
+              onClick={() => p.grams && onTakeGrams(p.grams)}
+            >
+              {p.label}
+              {p.grams && <span className="label muted"> {formatGrams(p.grams)}</span>}
+            </button>
+          ))}
+          <button className="chip" onClick={onFinish} disabled={busy || empty}>
+            Finished it
+          </button>
+        </div>
+      )}
+
+      {canGrams && (
+        <form
+          className="row take-grams"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const g = Number(grams);
+            if (g > 0 && gramsToDelta(item, g) != null) { onTakeGrams(g); setGrams(''); }
+          }}
+        >
+          <input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="any"
+            value={grams}
+            onChange={(e) => setGrams(e.target.value)}
+            placeholder="or an exact number of grams"
+            aria-label="Grams used"
+          />
+          <button type="submit" disabled={busy || !(Number(grams) > 0)}>Use</button>
+        </form>
+      )}
+
+      {!canGrams && !empty && (
+        <button onClick={onFinish} disabled={busy}>Finished it</button>
+      )}
     </div>
   );
 }
@@ -375,6 +397,12 @@ function Details({ item, onDone, removeItem }) {
         </label>
       )}
 
+      <PackSize
+        grams={item.pack_grams}
+        onChange={async (g) => { await updateItem(item.id, { pack_grams: g }); flash(); }}
+        label="How big is one?"
+      />
+
       <div className="field-grid">
         <label className="stack-tight">
           <span className="label muted">Where</span>
@@ -396,7 +424,7 @@ function Details({ item, onDone, removeItem }) {
       </label>
 
       <p className="label muted">
-        Bought {item.added > 0 ? describe({ ...item, quantity: item.added }) : 'an unknown amount'}
+        Bought {item.added > 0 ? describe({ ...item, quantity: item.added }).main : 'an unknown amount'}
         {item.created_at ? ` on ${new Date(item.created_at).toLocaleDateString()}` : ''}.
       </p>
 

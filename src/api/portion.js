@@ -121,16 +121,6 @@ export function gramsPerUnit(food, unit) {
   return { grams: null, basis: null, exact: false };
 }
 
-/**
- * How many of `unit` a package holds, when both weights are known —
- * "1 pack = 10 slices". Lets a pack be bought whole and eaten in slices.
- */
-export function unitsPerPackage(food, unit) {
-  const { grams } = gramsPerUnit(food, unit);
-  if (!grams || !(food?.package_grams > 0)) return null;
-  const n = food.package_grams / grams;
-  return n >= 1.5 ? Math.round(n) : null;
-}
 
 /* ------------------------------------------------------------- servings
  *

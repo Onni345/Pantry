@@ -46,7 +46,6 @@ const ItemSheet = (await load('/src/features/inventory/ItemSheet.jsx')).default;
 const AddMenu = (await load('/src/features/inventory/AddMenu.jsx')).default;
 const CategoryRows = (await load('/src/features/inventory/CategoryRows.jsx')).default;
 const { bucketize } = await load('/src/features/inventory/lenses.js');
-const AmountEntry = (await load('/src/components/AmountEntry.jsx')).default;
 const SignIn = (await load('/src/features/onboarding/SignIn.jsx')).default;
 const HouseholdPicker = (await load('/src/features/onboarding/HouseholdPicker.jsx')).default;
 
@@ -89,11 +88,6 @@ check('item sheet — weighed', () => renderToString(wrap(React.createElement(It
 check('item sheet — finished', () => renderToString(wrap(React.createElement(ItemSheet, { item: emptyItem, onClose() {} }))));
 
 check('add menu', () => renderToString(wrap(React.createElement(AddMenu, { onClose() {}, onScanReceipt() {} }))));
-
-check('amount entry — weight item', () =>
-  renderToString(React.createElement(AmountEntry, { item: weightItem, direction: 'remove', onSubmit() {}, onCancel() {} })));
-check('amount entry — counted item', () =>
-  renderToString(React.createElement(AmountEntry, { item: countItem, direction: 'add', onSubmit() {}, onCancel() {} })));
 
 const MacrosSummary = (await load('/src/features/macros/MacrosSummary.jsx')).default;
 check('macros summary', () => renderToString(wrap(React.createElement(MacrosSummary))));

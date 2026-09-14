@@ -15,6 +15,7 @@
  * Pure — no Dexie, no React, no fetch.
  */
 import { pluralize } from '../../units.js';
+import { gramsPerUnit } from '../inventory/amounts.js';
 
 const KEYS = ['calories', 'protein_g', 'carbs_g', 'fat_g'];
 
@@ -42,8 +43,8 @@ export function perUnit(item, macros = item?.macros) {
     return { basis: 'per 100 g', grams: 100, ...scale(macros, 1) };
   }
 
-  const grams = Number(item.grams_each);
-  if (!Number.isFinite(grams) || grams <= 0) return null;
+  const grams = gramsPerUnit(item);
+  if (!grams) return null;
 
   const noun = item.display_unit && item.display_unit !== 'count' ? item.display_unit : 'item';
   return { basis: `per ${noun}`, grams, noun, ...scale(macros, grams / 100) };
@@ -61,7 +62,7 @@ export function inStock(item, macros = item?.macros) {
   const quantity = Number(item.quantity) || 0;
   if (quantity <= 0) return null;
 
-  const grams = item.base_unit === 'g' ? quantity : quantity * Number(item.grams_each || 0);
+  const grams = item.base_unit === 'g' ? quantity : quantity * (gramsPerUnit(item) || 0);
   if (!Number.isFinite(grams) || grams <= 0) return null;
 
   const noun = item.base_unit === 'g'
@@ -81,7 +82,7 @@ export function inStock(item, macros = item?.macros) {
  */
 export function macroGap(item) {
   if (!item?.food_db_id || !item?.macros) return 'no-food';
-  if (item.base_unit !== 'g' && !(Number(item.grams_each) > 0)) return 'no-weight';
+  if (item.base_unit !== 'g' && !gramsPerUnit(item)) return 'no-weight';
   return 'ok';
 }
 

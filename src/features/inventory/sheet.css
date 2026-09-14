@@ -143,3 +143,21 @@
 }
 .sheet-nutrition.is-missing .label { color: var(--review-ink); }
 .sheet-nutrition.is-missing button { white-space: nowrap; padding-right: 0; }
+
+/* Taking some: whole units, then named portions, then grams. Loudest first,
+   because that is also most-used first. */
+.take-step button { flex: 1; font-size: 17px; font-weight: 700; padding: var(--space-3); }
+
+.take-portions { gap: var(--space-1) var(--space-2); }
+.chip {
+  border-radius: 999px;
+  padding: var(--space-1) var(--space-3);
+  font-size: 14px;
+  white-space: nowrap;
+}
+.chip .label { font-size: 12px; }
+
+.take-grams input { flex: 1; min-width: 0; }
+.take-grams input::-webkit-outer-spin-button,
+.take-grams input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.take-grams input { -moz-appearance: textfield; appearance: textfield; }

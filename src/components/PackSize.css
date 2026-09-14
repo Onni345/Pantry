@@ -1,0 +1,5 @@
+.pack-row { display: grid; grid-template-columns: 1fr 5rem; gap: var(--space-2); }
+.pack-row input { font-variant-numeric: tabular-nums; min-width: 0; }
+.pack-row input::-webkit-outer-spin-button,
+.pack-row input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.pack-row input { -moz-appearance: textfield; appearance: textfield; }

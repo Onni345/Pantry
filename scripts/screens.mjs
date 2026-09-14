@@ -32,8 +32,8 @@ const css = [
   '/src/features/receipts/receipts.css', '/src/features/recipes/recipes.css',
   '/src/features/inventory/groups.css', '/src/features/inventory/sheet.css',
   '/src/features/inventory/addmenu.css', '/src/features/receipts/review.css',
-  '/src/components/AmountEntry.css', '/src/components/FoodSearchInput.css',
   '/src/components/FoodSearchSheet.css', '/src/components/ServingPicker.css',
+  '/src/components/PackSize.css',
   '/src/features/onboarding/onboarding.css'
 ];
 const styles = (await Promise.all(
@@ -173,6 +173,17 @@ const screens = {
   'kitchen-macros': kitchen('macro'),
   sheet: wrap(React.createElement(ItemSheet, {
     item: stock.find((i) => i.name === 'Eggs'), onClose() {}
+  })),
+  // A part-used jar: the case the old model could not represent at all.
+  'sheet-jar': wrap(React.createElement(ItemSheet, {
+    item: {
+      id: 'jar1', household_id: H, name: 'Peanut butter', category: 'condiment',
+      base_unit: 'g', display_unit: 'jar', location: 'pantry',
+      pack_grams: 454, quantity: 390, added: 454,
+      food_db_id: 'usda:pb', created_at: new Date().toISOString(),
+      macros: { calories: 588, protein_g: 25, carbs_g: 20, fat_g: 50 }
+    },
+    onClose() {}
   })),
   add: wrap(React.createElement(AddMenu, { onClose() {}, onScanReceipt() {} })),
   intake: wrap(React.createElement(MacrosSummary)),

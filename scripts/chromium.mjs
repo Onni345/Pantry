@@ -14,7 +14,18 @@
 import { existsSync } from 'node:fs';
 import { chromium } from 'playwright';
 
-const ARGS = ['--no-sandbox'];
+// Chromium phones home to several Google endpoints on startup. In a sandbox
+// with no egress those connections hang rather than fail fast, which turned a
+// twenty-second drive into a two-minute timeout.
+const ARGS = [
+  '--no-sandbox',
+  '--disable-background-networking',
+  '--disable-component-update',
+  '--disable-sync',
+  '--disable-default-apps',
+  '--no-first-run',
+  '--no-default-browser-check'
+];
 
 export function launchOptions() {
   const pinned = process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium';

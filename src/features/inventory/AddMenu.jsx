@@ -5,8 +5,10 @@ import { gramsPerUnit, defaultServing, hasConfidentServings } from '../../api/po
 import { loadServings } from '../../api/foodLookup.js';
 import FoodSearchSheet from '../../components/FoodSearchSheet.jsx';
 import ServingPicker from '../../components/ServingPicker.jsx';
+import PackSize from '../../components/PackSize.jsx';
+import '../../components/PackSize.css';
 import { recentNames } from '../../db/queries.js';
-import { NATURAL_UNITS, UNITS_BY_DIMENSION, DIMENSIONS } from '../../units.js';
+import { NATURAL_UNITS, WEIGHT_UNIT_NAMES } from '../../units.js';
 import { LOCATIONS } from '../../db/schema.js';
 import { guessCategory } from './categoryGuess.js';
 import './addmenu.css';
@@ -69,6 +71,7 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
   const [location, setLocation] = useState(initial.location || 'fridge');
   const [food, setFood] = useState(initial.food || null);
   const [serving, setServing] = useState(null);
+  const [packGrams, setPackGrams] = useState(null);
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -92,7 +95,8 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
         // "3 eggs" and the macros still work out.
         unit: usePicker && serving ? servingUnit(serving, unit) : unit,
         food_db_id: food?.food_db_id || initial.food_db_id || null,
-        grams_each: gramsEach
+        grams_each: gramsEach,
+        pack_grams: packGrams
       });
       onDone();
     } finally {
@@ -183,7 +187,7 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
                 ))}
               </optgroup>
               <optgroup label="By weight">
-                {UNITS_BY_DIMENSION[DIMENSIONS.WEIGHT].map((u) => (
+                {WEIGHT_UNIT_NAMES.map((u) => (
                   <option key={u} value={u}>{u}</option>
                 ))}
               </optgroup>
@@ -197,6 +201,10 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
           </label>
         </div>
         )}
+
+        {/* Optional on every product, and the thing that lets per-100 g
+            macros scale to the jar or bag actually in the cupboard. */}
+        <PackSize grams={packGrams} onChange={setPackGrams} label="How big is one?" />
 
         <button className="primary" type="submit" disabled={busy || !name.trim()}>
           {busy ? 'Adding…' : 'Add it'}

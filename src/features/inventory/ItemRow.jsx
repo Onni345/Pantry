@@ -1,5 +1,5 @@
 import { perUnit, macroGap, formatCalories } from '../macros/perItem.js';
-import { describe } from '../../units.js';
+import { describe } from './amounts.js';
 
 /**
  * One line of food. The whole row is the tap target and it opens the sheet —
@@ -24,6 +24,9 @@ export default function ItemRow({ item, onOpen }) {
   // Enough to compare two things in the list without opening either.
   const per = perUnit(item);
   const gap = macroGap(item);
+  // "13 potatoes" over "2.27 kg": the noun is what you want, the weight is
+  // what was actually stored.
+  const amount = describe(item);
 
   return (
     <li>
@@ -37,9 +40,10 @@ export default function ItemRow({ item, onOpen }) {
           )}
         </span>
         <span className="food-figures">
-          <span className="food-amount">{describe(item)}</span>
+          <span className="food-amount">{amount.main}</span>
           {per ? (
             <span className="label muted food-kcal">
+              {amount.aside ? `${amount.aside} · ` : ''}
               {formatCalories(per.calories)} kcal {per.noun ? 'each' : '/ 100g'}
             </span>
           ) : (

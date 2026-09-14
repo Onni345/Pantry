@@ -1,26 +1,28 @@
 /**
- * Unit handling.
+ * Units.
  *
- * Two dimensions only: WEIGHT and COUNT. Pantry assumes food gets weighed —
- * that is the point of the app — so milk, honey and oil are all logged in
- * grams like everything else. Volume units are deliberately absent: allowing
- * them would mean guessing a density, and a guessed number undermines the
- * fine-grained control the app exists to give.
+ * Grams are the only real unit. Everything else is a *name for a number of
+ * grams* — an egg is 50 of them, a jar is 454, a slice is 21 — and the app's
+ * job is to let people speak in those names while it quietly keeps the grams.
  *
- * An item is stored in its dimension's BASE unit (grams, or whole things).
- * Events record deltas in that base unit plus what the user typed, so buying
- * 1 kg and using 30 g of it is just arithmetic.
+ * An item stores its amount in a base unit, which is grams whenever a weight
+ * is knowable and `count` only for things with genuinely no weight ("two
+ * containers of leftover curry"). `display_unit` is the noun it is spoken in.
+ * Nothing here converts between the two dimensions — that needs to know what
+ * one of a thing weighs, which is the item's business, not this module's, and
+ * lives in features/inventory/amounts.js.
  *
- * Pure module — no React, no Dexie, no network.
+ * Volume is deliberately absent. Millilitres to grams needs a density, and a
+ * guessed density is exactly the kind of invented number this app refuses to
+ * store. A carton counted in "1 carton" works fine without one.
  */
 
 export const DIMENSIONS = { WEIGHT: 'weight', COUNT: 'count' };
 
 /**
- * Natural units: nouns you count. "14 slices", "2 containers", "half a
- * gallon". The app does not need to know what a slice weighs to track that
- * you have fourteen of them — weight is optional metadata, not the price of
- * entry. Anything here behaves as a count: one unit, whatever a unit is.
+ * Nouns you count. "14 slices", "2 containers", "half a gallon". The app does
+ * not need to know what a slice weighs to track that you have fourteen — the
+ * weight is optional metadata that unlocks macros, not the price of entry.
  */
 export const NATURAL_UNITS = [
   'item', 'pack', 'container', 'bottle', 'can', 'jar', 'box', 'bag', 'carton', 'tub',
@@ -28,14 +30,51 @@ export const NATURAL_UNITS = [
   'gallon', 'quart', 'pint', 'litre', 'cup'
 ];
 
-/** A handful of nouns that don't pluralise by adding an s. */
-const IRREGULAR = { loaf: 'loaves', leaf: 'leaves', bunch: 'bunches', box: 'boxes' };
+/** Weight units someone might type. Exact factors, all to grams. */
+export const WEIGHT_UNITS = {
+  g: 1,
+  kg: 1000,
+  oz: 28.349523125,
+  lb: 453.59237
+};
+
+export const WEIGHT_UNIT_NAMES = Object.keys(WEIGHT_UNITS);
+
+const COUNT_UNITS = new Set(['count', 'dozen', ...NATURAL_UNITS]);
+
+/** Every unit name the app recognises, for "is this real" checks. */
+export const KNOWN_UNITS = new Set([...WEIGHT_UNIT_NAMES, ...COUNT_UNITS]);
+
+export const dimensionOf = (unit) =>
+  WEIGHT_UNITS[unit] ? DIMENSIONS.WEIGHT : COUNT_UNITS.has(unit) ? DIMENSIONS.COUNT : null;
+
+export const unitLabel = (unit) => (unit === 'count' ? 'item' : unit);
+
+export function baseUnitFor(unit) {
+  const d = dimensionOf(unit);
+  return d === DIMENSIONS.WEIGHT ? 'g' : d === DIMENSIONS.COUNT ? 'count' : null;
+}
+
+/** Nouns that don't pluralise by adding an s. */
+const IRREGULAR = { loaf: 'loaves', leaf: 'leaves', knife: 'knives' };
+
+/** Food words ending in -o that take -es. Everything else takes -s. */
+const O_ES = new Set(['potato', 'tomato', 'mango', 'buffalo', 'hero', 'echo', 'volcano']);
 
 export function pluralize(noun, n) {
   const v = Math.abs(Number(n) || 0);
   // "1 gallon" and "½ gallon", but "0 eggs" and "1½ gallons".
   if (v === 1 || (v > 0 && v < 1)) return noun;
-  return IRREGULAR[noun] || `${noun}s`;
+  if (IRREGULAR[noun]) return IRREGULAR[noun];
+
+  // -ch, -sh, -s, -x, -z take -es: bunches, boxes.
+  if (/(ch|sh|s|x|z)$/.test(noun)) return `${noun}es`;
+  // -o is not decidable by spelling: potatoes but avocados, both a consonant
+  // before the o. It is about the word's origin, so the -es words are listed.
+  if (O_ES.has(noun)) return `${noun}es`;
+  // Consonant before -y turns to -ies: berries, patties.
+  if (/[^aeiou]y$/.test(noun)) return `${noun.slice(0, -1)}ies`;
+  return `${noun}s`;
 }
 
 /** ½ reads better than 0.5 on a carton of milk. */
@@ -50,120 +89,51 @@ export function niceNumber(n) {
   return whole === 0 ? glyph : `${whole}${glyph}`;
 }
 
-export const BASE_UNIT = {
-  [DIMENSIONS.WEIGHT]: 'g',
-  [DIMENSIONS.COUNT]: 'count'
-};
-
-/** Multiplier to the dimension's base unit. Exact factors. */
-export const UNITS = {
-  g:     { dimension: DIMENSIONS.WEIGHT, factor: 1,            label: 'g' },
-  kg:    { dimension: DIMENSIONS.WEIGHT, factor: 1000,         label: 'kg' },
-  oz:    { dimension: DIMENSIONS.WEIGHT, factor: 28.349523125, label: 'oz' },
-  lb:    { dimension: DIMENSIONS.WEIGHT, factor: 453.59237,    label: 'lb' },
-
-  count: { dimension: DIMENSIONS.COUNT, factor: 1,  label: 'item' },
-  dozen: { dimension: DIMENSIONS.COUNT, factor: 12, label: 'dozen' }
-};
-
-for (const noun of NATURAL_UNITS) {
-  if (!UNITS[noun]) UNITS[noun] = { dimension: DIMENSIONS.COUNT, factor: 1, label: noun };
-}
-
-export const UNITS_BY_DIMENSION = {
-  [DIMENSIONS.WEIGHT]: ['g', 'kg', 'oz', 'lb'],
-  [DIMENSIONS.COUNT]: ['count', 'dozen', ...NATURAL_UNITS.filter((u) => u !== 'item')]
-};
-
-/**
- * How an item reads to a person: "8 eggs", "14 slices", "½ gallon", "1.1 kg".
- *
- * The stored shape (quantity + base unit + the noun it was bought in) is
- * never what's shown. An item counted in slices says slices; only genuinely
- * weighed things talk in grams.
- */
-export function describe(item) {
-  const qty = Number(item.quantity) || 0;
-  if (item.base_unit === 'g') {
-    const { value, unit } = humanize(qty, 'g');
-    return `${value} ${unit}`;
-  }
-  const noun = item.display_unit && item.display_unit !== 'count' ? item.display_unit : 'item';
-  return `${niceNumber(qty)} ${pluralize(noun, qty)}`;
-}
-
-/** Every recognized unit key, for quick "is this a real unit" checks. */
-export const KNOWN_UNITS = new Set(Object.keys(UNITS));
-
-export const dimensionOf = (unit) => UNITS[unit]?.dimension ?? null;
-export const unitLabel = (unit) => UNITS[unit]?.label ?? unit;
-
-export function baseUnitFor(unit) {
-  const d = dimensionOf(unit);
-  return d ? BASE_UNIT[d] : null;
+/** 1200 g reads better as 1.2 kg; 30 g should stay grams. */
+export function formatGrams(grams) {
+  const v = Number(grams) || 0;
+  return v >= 1000 ? `${round(v / 1000, 2)} kg` : `${round(v, v < 10 ? 1 : 0)} g`;
 }
 
 /**
- * Converts an amount into an item's base unit. Always exact.
+ * Converts an amount into an item's base unit, within one dimension.
  *
- * Throws across dimensions: three eggs have no weight the app can know, and
- * inventing one would be worse than refusing.
+ * Crossing dimensions throws on purpose: grams to eggs needs to know what one
+ * egg weighs, which this module has no business knowing. amounts.js does that
+ * conversion, using the item's own recorded weight.
  */
 export function toBase(value, fromUnit, baseUnit) {
   const n = Number(value);
   if (!Number.isFinite(n)) throw new Error('Amount must be a number.');
+  if (!KNOWN_UNITS.has(fromUnit)) throw new Error(`Unknown unit: ${fromUnit}`);
 
-  const from = UNITS[fromUnit];
-  const to = UNITS[baseUnit];
-  if (!from) throw new Error(`Unknown unit: ${fromUnit}`);
-  if (!to) throw new Error(`Unknown base unit: ${baseUnit}`);
-  if (to.factor !== 1) throw new Error(`${baseUnit} is not a base unit.`);
-
-  if (from.dimension !== to.dimension) {
-    throw new Error(
-      `Cannot convert ${unitLabel(fromUnit)} to ${unitLabel(baseUnit)} — ` +
-        'counted items have no weight of their own.'
-    );
-  }
-
-  return n * from.factor;
-}
-
-/** A base-unit amount expressed in some other unit of the same dimension. */
-export function fromBase(baseValue, baseUnit, toUnit) {
-  const to = UNITS[toUnit];
-  const base = UNITS[baseUnit];
-  if (!to || !base) throw new Error('Unknown unit.');
-  if (to.dimension !== base.dimension) {
-    throw new Error('Counted items cannot be shown as a weight.');
-  }
-  return Number(baseValue) / to.factor;
-}
-
-/** Readable form: 1200 g reads better as 1.2 kg, 30 g should stay grams. */
-export function humanize(baseValue, baseUnit) {
-  const v = Number(baseValue) || 0;
-  if (baseUnit === 'count') return { value: round(v, 2), unit: 'count' };
   if (baseUnit === 'g') {
-    return v >= 1000
-      ? { value: round(v / 1000, 2), unit: 'kg' }
-      : { value: round(v, 1), unit: 'g' };
+    const factor = WEIGHT_UNITS[fromUnit];
+    if (!factor) {
+      throw new Error(
+        `Cannot convert ${unitLabel(fromUnit)} to grams here — ` +
+        'that needs to know what one of them weighs.'
+      );
+    }
+    return n * factor;
   }
-  return { value: round(v, 2), unit: baseUnit };
+
+  if (baseUnit === 'count') {
+    if (WEIGHT_UNITS[fromUnit]) {
+      throw new Error('Cannot convert a weight to a count without a weight per unit.');
+    }
+    return fromUnit === 'dozen' ? n * 12 : n;
+  }
+
+  throw new Error(`Unknown base unit: ${baseUnit}`);
 }
 
-export function formatBase(baseValue, baseUnit) {
-  const { value, unit } = humanize(baseValue, baseUnit);
-  return `${value} ${unit === 'count' ? '' : unit}`.trim();
+/** Units offered when entering an amount — same dimension as the item. */
+export function enterableUnits(baseUnit) {
+  return baseUnit === 'g' ? [...WEIGHT_UNIT_NAMES] : ['count', 'dozen', ...NATURAL_UNITS];
 }
 
 export function round(n, places = 2) {
   const f = 10 ** places;
   return Math.round(Number(n) * f) / f;
-}
-
-/** Units offered when entering an amount — same dimension as the item. */
-export function enterableUnits(baseUnit) {
-  const dim = dimensionOf(baseUnit);
-  return dim ? [...UNITS_BY_DIMENSION[dim]] : [];
 }

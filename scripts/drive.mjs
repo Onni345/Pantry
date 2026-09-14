@@ -20,6 +20,8 @@ await server.listen();
 
 const browser = await launchChromium();
 const page = await browser.newPage({ viewport: { width: 1000, height: 900 } });
+// A missing element is a finding, not something to wait thirty seconds for.
+page.setDefaultTimeout(6000);
 
 const problems = [];
 page.on('console', (m) => {
@@ -29,6 +31,17 @@ page.on('pageerror', (e) => problems.push(`[pageerror] ${e.message}`));
 
 // Fake out the network the sandbox can't reach, so a lookup returns something
 // realistic instead of hanging. Supabase is stubbed to "signed in".
+// Anything not localhost or explicitly stubbed below is dead weight: Chrome's
+// own telemetry endpoints hang rather than fail fast when there is no egress,
+// which turned a twenty-second drive into a two-minute timeout.
+await page.route('**/*', (r) => {
+  const url = r.request().url();
+  if (url.startsWith('http://localhost') || url.startsWith('data:') || url.startsWith('blob:')) {
+    return r.continue();
+  }
+  return r.abort();
+});
+
 await page.route('**/api.nal.usda.gov/**', (r) => r.fulfill({
   status: 200, contentType: 'application/json',
   body: JSON.stringify({ foods: [{
@@ -83,6 +96,18 @@ const shot = async (name) => {
 
 const text = async () => (await page.locator('body').innerText()).replace(/\n+/g, ' | ');
 let failures = 0;
+
+/** Dismiss whatever is open, so one failure does not cascade into the rest. */
+async function clearOverlays() {
+  for (let i = 0; i < 3; i++) {
+    if (await page.getByRole('dialog').count() === 0) return;
+    await page.keyboard.press('Escape').catch(() => {});
+    const close = page.getByRole('button', { name: /^(close|done)$/i }).first();
+    if (await close.count()) await close.click({ timeout: 2000 }).catch(() => {});
+    await page.waitForTimeout(200);
+  }
+}
+
 const step = async (name, fn) => {
   const before = problems.length;
   try {
@@ -95,6 +120,7 @@ const step = async (name, fn) => {
   } catch (e) {
     failures++;
     console.log(`FAIL  ${name}\n        ${e.message.split('\n')[0]}`);
+    await clearOverlays();
   }
 };
 
@@ -136,7 +162,10 @@ await step('the sheet shows per-unit macros', async () => {
 
 await step('consuming one changes the quantity', async () => {
   const before = await text();
-  const minus = page.getByRole('button', { name: /^−1$|^-1$/ }).first();
+  // getByRole matches the ACCESSIBLE name, which is the aria-label when one
+  // is set — not the visible "−1 egg". Worth knowing: the visible text
+  // changed and this kept passing against the label, or vice versa.
+  const minus = page.getByRole('button', { name: /^take one/i }).first();
   if (await minus.count() === 0) throw new Error('no decrement button');
   await minus.click();
   await page.waitForTimeout(900);

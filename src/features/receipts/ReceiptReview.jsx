@@ -4,7 +4,7 @@ import { gramsPerUnit, servingsFor, defaultServing } from '../../api/portion.js'
 import { loadServings } from '../../api/foodLookup.js';
 import ServingPicker from '../../components/ServingPicker.jsx';
 import { confidenceOf, includedRows } from './receipts.js';
-import { UNITS_BY_DIMENSION, DIMENSIONS, NATURAL_UNITS } from '../../units.js';
+import { WEIGHT_UNIT_NAMES, NATURAL_UNITS } from '../../units.js';
 import { LOCATIONS } from '../../db/schema.js';
 import './review.css';
 
@@ -263,7 +263,7 @@ function EditSheet({ row, location, onLocationChange, onChange, onSearch, onClos
   const portions = servingsFor(food);
   const units = useMemo(() => [
     ...['item', ...NATURAL_UNITS.filter((u) => u !== 'item')],
-    ...UNITS_BY_DIMENSION[DIMENSIONS.WEIGHT]
+    ...WEIGHT_UNIT_NAMES
   ], []);
 
   return (

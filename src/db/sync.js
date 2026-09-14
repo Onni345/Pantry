@@ -46,6 +46,12 @@ const itemToRemote = (i) => ({
   location: i.location ?? null,
   base_unit: i.base_unit,
   display_unit: i.display_unit ?? null,
+  // The two weights. Without these an item that syncs to a second device
+  // arrives with no idea what one of it weighs, so it contributes nothing to
+  // intake there — the same silent class of bug as undone_type. Both need
+  // their columns server-side (patch-005) or these pushes are rejected.
+  grams_each: i.grams_each ?? null,
+  pack_grams: i.pack_grams ?? null,
   food_db_id: i.food_db_id ?? null,
   expiry_date: i.expiry_date ?? null,
   deleted: Boolean(i.deleted),
@@ -61,6 +67,8 @@ const itemToLocal = (r) => ({
   location: r.location,
   base_unit: r.base_unit,
   display_unit: r.display_unit,
+  grams_each: r.grams_each ?? null,
+  pack_grams: r.pack_grams ?? null,
   food_db_id: r.food_db_id,
   expiry_date: r.expiry_date,
   deleted: r.deleted ? 1 : 0,
