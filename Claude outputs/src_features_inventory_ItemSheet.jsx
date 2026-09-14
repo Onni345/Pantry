@@ -5,7 +5,6 @@ import { gramsPerUnit, servingsFor, defaultServing } from '../../api/portion.js'
 import { loadServings } from '../../api/foodLookup.js';
 import ServingPicker from '../../components/ServingPicker.jsx';
 import FoodSearchSheet from '../../components/FoodSearchSheet.jsx';
-import { perUnit, inStock, macroGap, formatCalories } from '../../features/macros/perItem.js';
 import { describe, niceNumber, pluralize } from '../../units.js';
 import { CATEGORIES, LOCATIONS } from '../../db/schema.js';
 import './sheet.css';
@@ -86,8 +85,6 @@ export default function ItemSheet({ item, onClose }) {
           {describe(item)}
           {item.quantity === 0 && <span className="label muted"> · all gone</span>}
         </p>
-
-        <Nutrition item={item} onFix={() => setDetails(true)} />
 
         <div className="row sheet-step">
           <button onClick={() => consume(step)} disabled={busy || item.quantity <= 0}>
@@ -173,68 +170,6 @@ export default function ItemSheet({ item, onClose }) {
 
         {details && <Details item={item} onDone={onClose} removeItem={removeItem} />}
       </div>
-    </div>
-  );
-}
-
-/**
- * What this food is worth, in the unit it is counted in.
- *
- * Standing at the fridge, "72 kcal per egg" is the useful sentence; "143 kcal
- * per 100 g" is a fact about eggs in general that you then have to do
- * arithmetic on. Weighed food keeps the per-100 g basis, because that is
- * already the unit it is bought and measured in.
- *
- * When it can't be worked out, it says which piece is missing and offers the
- * fix rather than rendering a blank — a silent gap here is exactly why the
- * intake screen reads lower than someone expects.
- */
-function Nutrition({ item, onFix }) {
-  const per = perUnit(item);
-  const all = inStock(item);
-  const gap = macroGap(item);
-
-  if (!per) {
-    return (
-      <div className="sheet-nutrition is-missing">
-        <p className="label">
-          {gap === 'no-food'
-            ? 'No nutrition attached — this food adds nothing to your intake.'
-            : `Nobody has said what one ${item.display_unit || 'item'} weighs, so this can't be counted.`}
-        </p>
-        <button className="link-button" onClick={onFix}>
-          {gap === 'no-food' ? 'Find product' : 'Set the weight'}
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <div className="sheet-nutrition">
-      <div className="nutrition-head">
-        <span className="label muted">{per.basis}</span>
-        {all && (
-          <span className="label muted">
-            {formatCalories(all.calories)} kcal in the {item.location}
-          </span>
-        )}
-      </div>
-      <dl className="nutrition-grid">
-        <Macro label="Calories" value={formatCalories(per.calories)} unit="kcal" />
-        <Macro label="Protein" value={per.protein_g} unit="g" />
-        <Macro label="Carbs" value={per.carbs_g} unit="g" />
-        <Macro label="Fat" value={per.fat_g} unit="g" />
-      </dl>
-    </div>
-  );
-}
-
-function Macro({ label, value, unit }) {
-  if (value == null) return null;
-  return (
-    <div>
-      <dt className="label muted">{label}</dt>
-      <dd>{value}<span className="label muted"> {unit}</span></dd>
     </div>
   );
 }

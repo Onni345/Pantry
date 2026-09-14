@@ -8,12 +8,11 @@
  *
  * Run:  node scripts/screens.mjs   ->  screens/*.png
  */
-import './node-compat.mjs';
 import 'fake-indexeddb/auto';
 import { createServer } from 'vite';
 import { renderToString } from 'react-dom/server';
 import React from 'react';
-import { launchChromium } from './chromium.mjs';
+import { chromium } from 'playwright';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
 process.env.VITE_SUPABASE_URL ||= 'https://screens.supabase.co';
@@ -239,7 +238,10 @@ const screens = {
 
 // The sandbox ships Chromium at a fixed path rather than in Playwright's
 // own cache, so point at it instead of downloading one.
-const browser = await launchChromium();
+const browser = await chromium.launch({
+  executablePath: process.env.CHROMIUM_PATH || '/opt/pw-browsers/chromium',
+  args: ['--no-sandbox']
+});
 const sizes = { phone: 390, laptop: 1000 };
 
 for (const [name, el] of Object.entries(screens)) {

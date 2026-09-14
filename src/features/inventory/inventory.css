@@ -171,11 +171,26 @@
 .food-name { font-weight: 700; letter-spacing: -0.01em; overflow-wrap: anywhere; }
 .food-note { color: var(--muted); }
 
+/* The right-hand column: how much is left, and what one of them is worth.
+   Stacked and right-aligned so the amounts line up down the list and the
+   calorie figures line up under them. */
+.food-figures {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0;
+  flex: none;
+}
+
 .food-amount {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+.food-kcal { font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+/* Not an error — just the reason this row contributes nothing to intake. */
+.food-kcal.is-missing { color: var(--review-ink); }
 
 .is-out .food-name, .is-out .food-amount { opacity: 0.5; }
 

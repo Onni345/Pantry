@@ -8,6 +8,7 @@
  *
  * Run:  node scripts/smoke-render.mjs
  */
+import './node-compat.mjs';
 import 'fake-indexeddb/auto';
 import { createServer } from 'vite';
 import react from '@vitejs/plugin-react';
@@ -61,7 +62,7 @@ const emptyItem = { ...weightItem, id: 'i3', quantity: 0 };
 check('sign-in screen', () => renderToString(React.createElement(SignIn)));
 check('household picker — two households', () =>
   renderToString(React.createElement(HouseholdPicker, {
-    households: [{ id: H, label: 'Apartment' }, { id: 'x', label: 'Family home' }],
+    households: [{ id: H, name: 'Apartment' }, { id: 'x', name: 'Family home' }],
     email: 'a@b.com', onPick() {}
   })));
 check('household picker — not on any list', () =>
@@ -164,7 +165,7 @@ check('food search sheet', () =>
 const Settings = (await load('/src/components/Settings.jsx')).default;
 check('settings panel', () =>
   renderToString(wrap(React.createElement(Settings, {
-    email: 'a@b.com', households: [{ id: H, label: 'Apartment' }], householdId: H,
+    email: 'a@b.com', households: [{ id: H, name: 'Apartment' }], householdId: H,
     onSwitch() {}, onClose() {}
   }))));
 

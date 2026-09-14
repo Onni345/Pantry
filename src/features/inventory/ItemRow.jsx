@@ -1,3 +1,4 @@
+import { perUnit, macroGap, formatCalories } from '../macros/perItem.js';
 import { describe } from '../../units.js';
 
 /**
@@ -19,6 +20,11 @@ export default function ItemRow({ item, onOpen }) {
   const left = item.added > 0 ? Math.min(1, item.quantity / item.added) : null;
   const low = left !== null && left <= 0.25 && !out;
 
+  // One figure, in this item's own unit — "72 kcal each", "365 kcal / 100g".
+  // Enough to compare two things in the list without opening either.
+  const per = perUnit(item);
+  const gap = macroGap(item);
+
   return (
     <li>
       <button className={`food-row${out ? ' is-out' : ''}`} onClick={onOpen}>
@@ -30,7 +36,20 @@ export default function ItemRow({ item, onOpen }) {
             </span>
           )}
         </span>
-        <span className="food-amount">{describe(item)}</span>
+        <span className="food-figures">
+          <span className="food-amount">{describe(item)}</span>
+          {per ? (
+            <span className="label muted food-kcal">
+              {formatCalories(per.calories)} kcal {per.noun ? 'each' : '/ 100g'}
+            </span>
+          ) : (
+            !out && (
+              <span className="label food-kcal is-missing">
+                {gap === 'no-food' ? 'no nutrition' : 'no weight set'}
+              </span>
+            )
+          )}
+        </span>
       </button>
     </li>
   );
