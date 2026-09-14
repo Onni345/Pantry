@@ -1,0 +1,58 @@
+/* Taller than a normal sheet: this one is a list you scan, not a form you
+   fill, so it wants the room. */
+.search-sheet { max-height: 92vh; }
+.search-field { font-size: 17px; }
+
+.search-results {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 0 calc(var(--space-3) * -1);
+  padding: 0 var(--space-3);
+}
+
+/* Section headers stay put while their own rows scroll under them, so you
+   never lose track of whether you're looking at a product or a generic. */
+.search-section {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: var(--space-2) 0 var(--space-1);
+}
+
+.search-list { list-style: none; margin: 0; padding: 0; }
+
+.search-row {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  border-radius: var(--radius);
+  background: transparent;
+  padding: var(--space-2);
+}
+.search-row:hover:not(:disabled) { opacity: 1; }
+.search-row.is-active { background: var(--bg); }
+
+.search-thumb {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  object-fit: contain;
+  border-radius: var(--radius);
+  background: var(--bg);
+  border: 1px solid var(--line);
+}
+.search-thumb.is-empty { display: block; }
+
+.search-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+.search-name { font-weight: 600; overflow-wrap: anywhere; }
+.search-text .label { font-size: 13px; }

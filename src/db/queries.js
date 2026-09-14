@@ -397,6 +397,19 @@ export async function cacheFood(food) {
   await db.food_cache.put({
     food_db_id: food.food_db_id,
     name: food.name,
+    // Identity, kept whole. A cached food has to be usable for everything a
+    // freshly fetched one is — the confirmation card shows the brand, the
+    // package weight is what makes "1 pack" mean grams, and the photo is the
+    // difference between recognising the product and reading about it.
+    brand: food.brand || '',
+    brand_owner: food.brand_owner || '',
+    upc: food.upc || '',
+    image: food.image || null,
+    package_text: food.package_text || '',
+    package_grams: food.package_grams ?? null,
+    serving_text: food.serving_text || '',
+    serving_grams: food.serving_grams ?? null,
+    dataset: food.dataset || '',
     macros_per_unit: food.macros_per_unit,
     source: food.source,
     detail: food.detail || '',
@@ -414,7 +427,8 @@ export async function searchCachedFoods(query, limit = 8) {
   const q = String(query || '').trim().toLowerCase();
   if (!q) return [];
   const all = await db.food_cache.toArray();
-  return all
-    .filter((f) => String(f.name || '').toLowerCase().includes(q))
-    .slice(0, limit);
+  // Brand is searched too: someone typing "kirkland" is looking for the
+  // brand, and matching only the product name would miss every one of them.
+  const hay = (f) => `${f.name || ''} ${f.brand || ''} ${f.brand_owner || ''}`.toLowerCase();
+  return all.filter((f) => hay(f).includes(q)).slice(0, limit);
 }

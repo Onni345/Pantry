@@ -1,5 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useInventory } from '../../context/InventoryContext.jsx';
+import { getCachedFood } from '../../api/foodLookup.js';
+import { gramsPerUnit } from '../../api/portion.js';
+import FoodSearchSheet from '../../components/FoodSearchSheet.jsx';
 import { describe, niceNumber, pluralize } from '../../units.js';
 import { CATEGORIES, LOCATIONS } from '../../db/schema.js';
 import './sheet.css';
@@ -137,19 +140,103 @@ function Details({ item, onDone, removeItem }) {
     category: item.category,
     expiry_date: item.expiry_date || ''
   });
+  const [food, setFood] = useState(null);
+  const [searching, setSearching] = useState(false);
+  const [grams, setGrams] = useState(item.grams_each ?? '');
   const [saved, setSaved] = useState(false);
   const [confirmRemove, setConfirmRemove] = useState(false);
+
+  const counted = item.base_unit !== 'g';
+  const noun = counted && item.display_unit !== 'count' ? item.display_unit : 'item';
+
+  useEffect(() => {
+    let live = true;
+    if (!item.food_db_id) { setFood(null); return undefined; }
+    getCachedFood(item.food_db_id).then((f) => { if (live) setFood(f || null); });
+    return () => { live = false; };
+  }, [item.food_db_id]);
+
+  const flash = () => { setSaved(true); setTimeout(() => setSaved(false), 1500); };
 
   const set = (k) => async (e) => {
     const next = { ...form, [k]: e.target.value };
     setForm(next);
     await updateItem(item.id, { [k]: e.target.value || null });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 1500);
+    flash();
   };
+
+  /** Attaching a product also fills in what one unit weighs, when it can. */
+  async function attach(picked) {
+    const per = gramsPerUnit(picked, item.display_unit || 'item');
+    const next = per.grams ?? (item.grams_each || null);
+    setFood(picked);
+    setGrams(next ?? '');
+    setSearching(false);
+    await updateItem(item.id, { food_db_id: picked.food_db_id, grams_each: next });
+    flash();
+  }
+
+  async function saveGrams(value) {
+    const n = Number(value);
+    await updateItem(item.id, { grams_each: Number.isFinite(n) && n > 0 ? n : null });
+    flash();
+  }
+
+  if (searching) {
+    return (
+      <FoodSearchSheet
+        initialQuery={item.name}
+        title="Find product"
+        onPick={attach}
+        onClose={() => setSearching(false)}
+      />
+    );
+  }
 
   return (
     <div className="stack-tight sheet-details">
+      {/* The repair path. Before this existed, an item added without a
+          product match could never get one, and so could never contribute a
+          single calorie no matter how carefully it was logged. */}
+      <div className="stack-tight">
+        <span className="label muted">Nutrition</span>
+        <div className="add-product">
+          <div className="stack-tight">
+            {food ? (
+              <>
+                <span>{food.name}</span>
+                <span className="label muted">
+                  {[food.brand, food.package_text].filter(Boolean).join(' \u00b7 ') || food.detail}
+                </span>
+              </>
+            ) : (
+              <span className="label muted">Nothing attached — no macros from this item</span>
+            )}
+          </div>
+          <button type="button" className="link-button" onClick={() => setSearching(true)}>
+            {food ? 'Change' : 'Find product'}
+          </button>
+        </div>
+      </div>
+
+      {/* Counted items need one number to join the two systems up. Weighed
+          items are already in grams and are not asked. */}
+      {counted && (
+        <label className="stack-tight">
+          <span className="label muted">One {noun} weighs</span>
+          <div className="row">
+            <input
+              type="number" inputMode="decimal" min="0" step="any"
+              value={grams}
+              onChange={(e) => setGrams(e.target.value)}
+              onBlur={(e) => saveGrams(e.target.value)}
+              placeholder="grams — optional"
+            />
+            <span className="label muted">g</span>
+          </div>
+        </label>
+      )}
+
       <div className="field-grid">
         <label className="stack-tight">
           <span className="label muted">Where</span>

@@ -49,3 +49,17 @@
 @media (min-width: 34rem) {
   .add-fab { right: calc(50% - 20rem + var(--space-3)); }
 }
+
+/* The product a hand-added item is attached to, if any. Sits between the
+   name and the amount because that is the order the question gets asked. */
+.add-product {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg);
+}
+.add-product > .stack-tight { min-width: 0; gap: 0; }

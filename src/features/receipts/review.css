@@ -1,0 +1,279 @@
+/*
+ * Grocery import. A phone gets one card and nothing else; a laptop gets the
+ * queue beside it, because a mouse can use a list and a thumb can't.
+ */
+.review-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(35, 32, 27, 0.45);
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  z-index: 20;
+}
+
+.review {
+  width: 100%;
+  background: var(--surface);
+  display: grid;
+  grid-template-columns: 1fr;
+  overflow: hidden;
+}
+
+/* ------------------------------------------------------------------ queue */
+/* Hidden on a phone. The dots and the card say everything a thumb needs. */
+.review-queue { display: none; }
+
+.review-queue-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: 15px;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.review-queue-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.queue-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  border-radius: var(--radius);
+  padding: var(--space-2);
+  font-size: 14px;
+}
+.queue-row:hover:not(:disabled) { opacity: 1; background: var(--bg); }
+.queue-row.is-current { background: var(--bg); font-weight: 700; }
+.queue-row.is-decided .queue-name { opacity: 0.45; }
+.queue-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queue-mark { flex: none; }
+
+/* Confidence as a colour before it is a word — the queue is readable at a
+   glance precisely because you don't have to read it. */
+.dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.dot-high { background: var(--accent); }
+.dot-medium { background: var(--warn); }
+.dot-low { background: var(--review-line); }
+.dot-working { background: var(--line); }
+
+/* ------------------------------------------------------------------ stage */
+.review-stage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.review-head { display: flex; align-items: center; justify-content: space-between; }
+.review-note, .review-hint { text-align: center; }
+.review-hint { display: none; }
+
+/* ------------------------------------------------------------------- card */
+.item-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  text-align: center;
+  padding: var(--space-4) var(--space-3);
+}
+
+/* The price is the fastest way to tell which line of the receipt this is. */
+.card-price {
+  font-size: 30px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+}
+
+.card-shop {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 12px;
+  color: var(--muted);
+  min-height: 1rem;
+}
+
+.card-name {
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  max-width: 18ch;
+  overflow-wrap: anywhere;
+}
+
+.card-size { font-size: 15px; }
+
+.card-image {
+  width: 96px;
+  height: 96px;
+  object-fit: contain;
+  border-radius: var(--radius);
+  background: var(--bg);
+  border: 1px solid var(--line);
+  margin: var(--space-1) 0;
+}
+
+.badge {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding: var(--space-1) var(--space-3);
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+.badge-high { color: var(--accent); border-color: var(--accent); }
+.badge-medium { color: var(--warn); border-color: var(--warn); }
+.badge-low {
+  color: var(--review-ink);
+  background: var(--tone-review);
+  border-color: var(--review-line);
+}
+.badge-working { color: var(--muted); border-color: var(--line); }
+
+.card-macros {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-1) var(--space-4);
+  margin: var(--space-1) 0 0;
+}
+.card-macros div { display: flex; flex-direction: column; gap: 0; }
+.card-macros dt { font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+.card-macros dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.card-macros dd .label { font-weight: 400; font-size: 11px; }
+
+.card-grams { font-size: 13px; }
+.card-edit { margin-top: var(--space-2); }
+
+/* ---------------------------------------------------------------- actions */
+/* Two targets, thumb-sized, far enough apart that a misfire is unlikely and
+   unambiguous enough that neither needs reading twice. */
+.review-actions {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr;
+  gap: var(--space-3);
+}
+
+.act {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border-radius: calc(var(--radius) * 2);
+}
+.act-glyph { font-size: 22px; line-height: 1; }
+.act-label { font-size: 13px; font-weight: 700; }
+
+.act-discard { color: var(--danger); border-color: var(--line); }
+.act-accept {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* ---------------------------------------------------------------- summary */
+.review-summary {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  text-align: center;
+  padding: var(--space-4) var(--space-3);
+}
+.summary-count {
+  font-size: 56px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.summary-label { font-size: 16px; }
+.summary-where { margin-top: var(--space-3); }
+.summary-where select { text-transform: capitalize; width: auto; }
+.summary-save { width: 100%; max-width: 22rem; padding: var(--space-3); font-size: 17px; }
+
+/* ----------------------------------------------------------------- edit */
+.edit-product {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg);
+}
+.edit-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: var(--space-2); }
+.edit-grid select { text-transform: capitalize; }
+.edit-grid input, .edit-grid select { min-width: 0; }
+
+.needs-review {
+  background: var(--tone-review);
+  border-color: var(--review-line);
+  box-shadow: 0 0 0 3px var(--review-glow);
+}
+
+/* ------------------------------------------------------------------ wide */
+@media (min-width: 52rem) {
+  .review-backdrop { align-items: center; padding: var(--space-4); }
+  .review {
+    max-width: 62rem;
+    height: min(44rem, 90vh);
+    border: 1px solid var(--line);
+    border-radius: calc(var(--radius) * 2);
+    grid-template-columns: 17rem 1fr;
+  }
+  .review-queue {
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--line);
+    background: var(--bg);
+    min-height: 0;
+  }
+  .review-stage { padding: var(--space-4); }
+  .review-hint { display: block; }
+  .card-name { font-size: 32px; max-width: 22ch; }
+  .card-price { font-size: 34px; }
+  .review-actions { max-width: 26rem; align-self: center; width: 100%; }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .item-card { animation: card-in 0.18s ease-out; }
+  @keyframes card-in {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: none; }
+  }
+}
+
+/* An unidentified item: accepting it is possible but no longer the thing the
+   eye lands on. The green belongs to "Find product" on this card. */
+.review-actions.is-unsure .act-accept {
+  background: var(--surface);
+  border-color: var(--line);
+  color: var(--ink);
+}
+.review-actions.is-unsure { grid-template-columns: 1fr 1fr; }

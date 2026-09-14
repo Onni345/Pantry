@@ -100,18 +100,66 @@ check('macros summary', () => renderToString(wrap(React.createElement(MacrosSumm
 const RecipeSuggestions = (await load('/src/features/recipes/RecipeSuggestions.jsx')).default;
 check('recipe suggestions (idle)', () => renderToString(wrap(React.createElement(RecipeSuggestions))));
 
-const receiptScanModule = await load('/src/features/receipts/ReceiptScan.jsx');
-const ReceiptScan = receiptScanModule.default;
-const { ReceiptRow } = receiptScanModule;
+const ReceiptScan = (await load('/src/features/receipts/ReceiptScan.jsx')).default;
+const ReceiptReview = (await load('/src/features/receipts/ReceiptReview.jsx')).default;
+const { ItemCard } = await load('/src/features/receipts/ReceiptReview.jsx');
+const FoodSearchSheet = (await load('/src/components/FoodSearchSheet.jsx')).default;
 check('receipt scan (idle)', () => renderToString(wrap(React.createElement(ReceiptScan, { onClose() {} }))));
+
 const receiptRow = {
-  id: 'r1', rawName: 'GRAPES GREEN', name: 'Grapes Green', quantity: 1.174, unit: 'kg',
-  price: 7.03, include: true, matchStatus: 'matched',
-  matchedFood: { food_db_id: 'usda:1', name: 'Grapes, green', macros_per_unit: {} }
+  id: 'r1', rawName: 'GOODGATH JASMINE RICE 5LB', name: 'Jasmine Rice',
+  query: 'Good & Gather jasmine rice', brand: 'Good & Gather', retailer: 'Target',
+  quantity: 1, unit: 'pack', price: 6.49, include: true, decided: false,
+  state: 'done', candidates: [], review: {},
+  matchedFood: {
+    food_db_id: 'usda:1', name: 'Jasmine Rice', brand: 'Good & Gather',
+    package_text: '5 lb', package_grams: 2267.96, serving_text: '0.25 cup', serving_grams: 45,
+    macros_per_unit: { basis: 'per_100g', calories: 360, protein_g: 7.1, carbs_g: 79, fat_g: 0.6 }
+  }
 };
-check('receipt row — matched', () => renderToString(React.createElement(ReceiptRow, { row: receiptRow, onChange() {} })));
-check('receipt row — not found', () =>
-  renderToString(React.createElement(ReceiptRow, { row: { ...receiptRow, matchStatus: 'not_found', matchedFood: null }, onChange() {} })));
+
+check('item card — high confidence', () =>
+  renderToString(React.createElement(ItemCard, { row: receiptRow, onEdit() {} })));
+check('item card — check product', () =>
+  renderToString(React.createElement(ItemCard, { row: { ...receiptRow, review: { match: true } }, onEdit() {} })));
+check('item card — check quantity', () =>
+  renderToString(React.createElement(ItemCard, { row: { ...receiptRow, review: { quantity: true } }, onEdit() {} })));
+check('item card — unidentified', () =>
+  renderToString(React.createElement(ItemCard, {
+    row: { ...receiptRow, matchedFood: null, review: { name: true, match: true, quantity: true } }, onEdit() {}
+  })));
+check('item card — still working', () =>
+  renderToString(React.createElement(ItemCard, { row: { ...receiptRow, state: 'searching', matchedFood: null }, onEdit() {} })));
+check('item card — weighed line, no product', () =>
+  renderToString(React.createElement(ItemCard, {
+    row: { ...receiptRow, unit: 'kg', quantity: 0.778, matchedFood: null, brand: null, review: { match: true } }, onEdit() {}
+  })));
+
+check('receipt review — queue and card', () =>
+  renderToString(React.createElement(ReceiptReview, {
+    rows: [receiptRow, { ...receiptRow, id: 'r2', name: 'Bananas', decided: true }],
+    onChange() {}, onSave() {}, onClose() {},
+    location: 'pantry', onLocationChange() {}, saving: false, note: '', error: ''
+  })));
+check('receipt review — everything decided', () =>
+  renderToString(React.createElement(ReceiptReview, {
+    rows: [{ ...receiptRow, decided: true }],
+    onChange() {}, onSave() {}, onClose() {},
+    location: 'pantry', onLocationChange() {}, saving: false, note: '', error: ''
+  })));
+// An empty receipt renders nothing rather than an empty frame. The point of
+// this check is that it does that instead of throwing.
+check('receipt review — no rows renders nothing, quietly', () => {
+  const html = renderToString(React.createElement(ReceiptReview, {
+    rows: [], onChange() {}, onSave() {}, onClose() {},
+    location: 'fridge', onLocationChange() {}, saving: false, note: '', error: ''
+  }));
+  if (html !== '') throw new Error(`expected nothing, got ${html.slice(0, 40)}`);
+  return 'rendered nothing, as intended';
+});
+
+check('food search sheet', () =>
+  renderToString(React.createElement(FoodSearchSheet, { onPick() {}, onClose() {} })));
 
 const Settings = (await load('/src/components/Settings.jsx')).default;
 check('settings panel', () =>

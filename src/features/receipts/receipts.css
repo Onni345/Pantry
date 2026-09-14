@@ -22,88 +22,9 @@
   margin-top: var(--space-4);
 }
 
-.receipt-rows {
-  max-height: 70vh;
-  overflow-y: auto;
-}
 
-/*
- * Two deliberately different layouts, not one layout squeezed.
- *
- * Phone (default): the name field gets the full width, because that's the
- * one thing you actually type into, and qty/unit/price sit beneath it as a
- * compact cluster. Nothing scrolls sideways.
- *
- * 34rem and up (the same breakpoint the inventory and macros screens use —
- * one breakpoint for the whole app, not a per-component guess): the item
- * collapses onto a single line, which is how it reads on a laptop while
- * you check a receipt against the screen.
- */
-.receipt-row {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: var(--space-2);
-  padding: var(--space-3) 0;
-  border-bottom: 1px solid var(--line);
-}
-.receipt-row:last-child { border-bottom: none; }
-
-.receipt-row > input[type='checkbox'] {
-  width: auto;
-  margin-top: var(--space-2);
-}
-
-.receipt-row-name { min-width: 0; }
-/* The food-search box carries its own "Name" label for the add-item form.
-   Here the row's shape already says what the field is. */
-.receipt-row-name .food-search > .label { display: none; }
-
-.receipt-match-note {
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.receipt-fields {
-  grid-column: 2;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-/* Wide enough for a real weight off a receipt — 0.778 was being clipped to
-   "0.7", which hides the number you're being asked to check. The spinners
-   are hidden because they eat the width that digits need. */
-.receipt-qty { width: 5.5rem; }
-.receipt-unit { width: 6rem; }
-
-.receipt-qty::-webkit-outer-spin-button,
-.receipt-qty::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.receipt-qty { -moz-appearance: textfield; appearance: textfield; }
-
-/* A figure off the receipt, not an input — tabular numerals so the column
-   lines up when you scan down it. */
-.receipt-price {
-  margin-left: auto;
-  color: var(--muted);
-  font-variant-numeric: tabular-nums;
-}
-
-@media (min-width: 34rem) {
-  .receipt-row {
-    grid-template-columns: auto minmax(12rem, 1fr) auto;
-    align-items: start;
-    padding: var(--space-2) 0;
-  }
-
-  .receipt-fields {
-    grid-column: auto;
-    padding-top: 0;
-  }
-
-  .receipt-price { min-width: 3.5rem; text-align: right; }
-}
-
-.receipt-footer { flex-wrap: wrap; justify-content: space-between; }
-.receipt-destination { gap: var(--space-2); }
-.receipt-destination select { width: auto; text-transform: capitalize; }
+/* The upload step, and nothing else. Confirming each item lives in
+   review.css — the table this file used to style is gone, replaced by one
+   card at a time. */
+.receipt-scan { max-width: 32rem; }
+.receipt-scan input[type='file'] { padding: var(--space-2); }

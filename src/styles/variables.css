@@ -17,6 +17,14 @@
   --danger: #9c3328;
   --warn: #8a5a00;        /* expiring within 2 days */
 
+  /* "Check this one." Softer than --danger on purpose: an uncertain field is
+     not an error, it's an unfinished thought, and a receipt with six of them
+     shouldn't look like something went wrong. */
+  --tone-review: #fbeae6;
+  --review-line: #d8a99e;
+  --review-glow: rgba(199, 115, 96, 0.18);
+  --review-ink: #9c4f3c;
+
   /* Where a thing lives, as colour. Cold, colder, dry — so the eye can sort
      the list before the words are read. Used as a 3px edge on a shelf, never
      as a fill. */

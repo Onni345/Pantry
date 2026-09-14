@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useInventory } from '../../context/InventoryContext.jsx';
 import { lookupFood } from '../../api/foodLookup.js';
+import { gramsPerUnit } from '../../api/portion.js';
+import FoodSearchSheet from '../../components/FoodSearchSheet.jsx';
 import { recentNames } from '../../db/queries.js';
 import { NATURAL_UNITS, UNITS_BY_DIMENSION, DIMENSIONS } from '../../units.js';
 import { LOCATIONS } from '../../db/schema.js';
@@ -63,7 +65,14 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
   const [quantity, setQuantity] = useState('1');
   const [unit, setUnit] = useState(initial.unit || 'item');
   const [location, setLocation] = useState(initial.location || 'fridge');
+  const [food, setFood] = useState(initial.food || null);
+  const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // What one of them weighs, so a counted item can still carry macros. Shown
+  // rather than hidden, because a number the app is guessing at should be
+  // visible to the person who can correct it.
+  const per = gramsPerUnit(food, unit);
 
   async function submit(e) {
     e.preventDefault();
@@ -76,12 +85,28 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
         unit,
         location,
         category: guessCategory(name) || 'other',
-        food_db_id: initial.food_db_id || null
+        food_db_id: food?.food_db_id || initial.food_db_id || null,
+        grams_each: per.grams
       });
       onDone();
     } finally {
       setBusy(false);
     }
+  }
+
+  if (searching) {
+    return (
+      <FoodSearchSheet
+        initialQuery={name}
+        title="Find product"
+        onPick={(picked) => {
+          setFood(picked);
+          if (!name.trim()) setName(picked.name);
+          setSearching(false);
+        }}
+        onClose={() => setSearching(false)}
+      />
+    );
   }
 
   return (
@@ -91,6 +116,27 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
           <span className="label muted">What is it</span>
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Eggs" autoFocus />
         </label>
+
+        {/* Attaching a product is optional and always has been — but until
+            now there was no way to do it at all from here, which meant a
+            hand-added item could never have macros. */}
+        <div className="add-product">
+          <div className="stack-tight">
+            {food ? (
+              <>
+                <span>{food.name}</span>
+                <span className="label muted">
+                  {[food.brand, food.package_text].filter(Boolean).join(' \u00b7 ') || food.detail}
+                </span>
+              </>
+            ) : (
+              <span className="label muted">No nutrition attached</span>
+            )}
+          </div>
+          <button type="button" className="link-button" onClick={() => setSearching(true)}>
+            {food ? 'Change' : 'Find product'}
+          </button>
+        </div>
 
         <div className="add-qty">
           <label className="stack-tight">
@@ -127,7 +173,9 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
           {busy ? 'Adding…' : 'Add it'}
         </button>
         <p className="label muted">
-          No weight needed. Nutrition can come later, or never.
+          {per.grams != null
+            ? `${per.exact ? 'One' : 'About one'} ${unit} = ${per.grams} g${per.basis === 'table' ? ' (estimated)' : ''}.`
+            : 'No weight needed. Nutrition can come later, or never.'}
         </p>
       </form>
     </Panel>
@@ -155,7 +203,7 @@ function BarcodeAdd({ onDone, onBack }) {
 
   if (state === 'found') {
     return <ManualAdd onDone={onDone} onBack={() => setState('idle')}
-      initial={{ name: food.name, unit: 'item', food_db_id: food.food_db_id }} />;
+      initial={{ name: food.name, unit: 'item', food }} />;
   }
 
   return (

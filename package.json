@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "smoke": "node scripts/smoke-render.mjs",
     "screens": "node scripts/screens.mjs",
-    "sample-sql": "node scripts/sample-fridge-sql.mjs"
+    "sample-sql": "node scripts/sample-fridge-sql.mjs",
+    "test": "node scripts/test/run.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.0",

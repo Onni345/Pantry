@@ -286,8 +286,24 @@ export async function suggestRecipes(items, { signal } = {}) {
   return parseRecipes(text, stock);
 }
 
-// Receipt scanning used to live here, asking Gemini to tidy up item names.
-// It no longer calls a model at all — see features/receipts/receipts.js
-// (`expandReceiptName`). Reading a receipt is clerical work with a right
-// answer, so a lookup table does it: no quota, no key, no network, and the
-// same result every time.
+/**
+ * Decides what a chunk of receipt lines actually are, choosing among food
+ * database candidates the app already fetched.
+ *
+ * *Reading* the receipt still involves no model — regex finds the priced
+ * lines, a table expands abbreviations. This is the step after: matching
+ * garbled shop text to a real food is judgment over real options, with no
+ * lookup that settles it, which is the kind of work a model is for.
+ *
+ * Chunked rather than one call per item: a twenty-line receipt would be
+ * twenty calls and a quota you'd notice. Five at a time means four calls,
+ * and rows still land in visible waves rather than after one long wait.
+ */
+export async function matchReceiptLines(rows, { signal } = {}) {
+  const { buildMatchPrompt, applyMatches } = await import('../features/receipts/matching.js');
+  if (rows.length === 0) return [];
+
+  const { prompt, schema } = buildMatchPrompt(rows);
+  const text = await callGeminiJSON(prompt, schema, { maxOutputTokens: 2000, signal });
+  return applyMatches(rows, text);
+}

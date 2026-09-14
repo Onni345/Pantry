@@ -30,8 +30,9 @@ const css = [
   '/src/features/inventory/inventory.css', '/src/features/macros/macros.css',
   '/src/features/receipts/receipts.css', '/src/features/recipes/recipes.css',
   '/src/features/inventory/groups.css', '/src/features/inventory/sheet.css',
-  '/src/features/inventory/addmenu.css',
+  '/src/features/inventory/addmenu.css', '/src/features/receipts/review.css',
   '/src/components/AmountEntry.css', '/src/components/FoodSearchInput.css',
+  '/src/components/FoodSearchSheet.css',
   '/src/features/onboarding/onboarding.css'
 ];
 const styles = (await Promise.all(
@@ -46,27 +47,56 @@ const CategoryRows = (await load('/src/features/inventory/CategoryRows.jsx')).de
 const { bucketize } = await load('/src/features/inventory/lenses.js');
 const MacrosSummary = (await load('/src/features/macros/MacrosSummary.jsx')).default;
 const Settings = (await load('/src/components/Settings.jsx')).default;
-const { ReceiptRow } = await load('/src/features/receipts/ReceiptScan.jsx');
+const ReceiptReview = (await load('/src/features/receipts/ReceiptReview.jsx')).default;
+const FoodSearchSheet = (await load('/src/components/FoodSearchSheet.jsx')).default;
+const { SearchResults, groupResults } = await load('/src/components/FoodSearchSheet.jsx');
 
 const H = '00000000-0000-0000-0000-000000000000';
 const wrap = (el) => React.createElement(InventoryProvider, { householdId: H }, el);
 
-// A real shop, not lorem ipsum — the widths that matter are the ones real
-// names produce.
+// A real Target shop, mid-review: some lines settled, one still resolving,
+// one the resolver could not place at all. The screenshot has to show what
+// the queue looks like while it is being worked through, not only when it is
+// finished.
+// [receipt text, name, qty, unit, price, state, food, review, decided]
+const FOODS = {
+  rice: {
+    food_db_id: 'usda:1', name: 'Jasmine Rice', brand: 'Good & Gather',
+    package_text: '5 lb', package_grams: 2267.96, serving_text: '0.25 cup', serving_grams: 45,
+    macros_per_unit: { basis: 'per_100g', calories: 360, protein_g: 7.1, carbs_g: 79, fat_g: 0.6 }
+  },
+  yogurt: {
+    food_db_id: 'usda:2', name: 'Triple Zero Greek Yogurt', brand: 'Oikos',
+    package_text: '5.3 oz', package_grams: 150, serving_text: '1 container', serving_grams: 150,
+    macros_per_unit: { basis: 'per_100g', calories: 63, protein_g: 10, carbs_g: 5.3, fat_g: 0 }
+  },
+  zucchini: {
+    food_db_id: 'usda:3', name: 'Squash, zucchini, includes skin, raw',
+    macros_per_unit: { basis: 'per_100g', calories: 17, protein_g: 1.2, carbs_g: 3.1, fat_g: 0.3 }
+  },
+  grapes: {
+    food_db_id: 'usda:4', name: 'Grapes, red or green, raw',
+    macros_per_unit: { basis: 'per_100g', calories: 69, protein_g: 0.7, carbs_g: 18, fat_g: 0.2 }
+  },
+  cheese: {
+    food_db_id: 'usda:5', name: 'Sliced Sharp Cheddar', brand: 'Good & Gather',
+    package_text: '8 oz', package_grams: 226.8, serving_text: '1 slice', serving_grams: 21,
+    macros_per_unit: { basis: 'per_100g', calories: 404, protein_g: 23, carbs_g: 3.1, fat_g: 33 }
+  }
+};
+
 const receiptRows = [
-  ['Zucchini Green', 0.778, 'kg', 4.66, 'matched', 'Squash, zucchini, includes skin, raw'],
-  ['Banana Cavendish', 0.442, 'kg', 1.32, 'matched', 'Bananas, raw'],
-  ['Potatoes Brushed', 1.328, 'kg', 3.97, 'not_found', null],
-  ['Broccoli', 0.808, 'kg', 4.84, 'matched', 'Broccoli, raw'],
-  ['Brussel Sprouts', 0.322, 'kg', 5.15, 'matched', 'Brussels sprouts, raw'],
-  ['Grapes Green', 1.174, 'kg', 7.03, 'not_found', null],
-  ['Peas Snow', 0.218, 'kg', 3.27, 'not_found', null],
-  ['Tomatoes Grape', 1, 'count', 2.99, 'not_found', null],
-  ['Lettuce Iceberg', 1, 'count', 2.49, 'matched', 'Lettuce, iceberg, raw']
-].map(([name, quantity, unit, price, matchStatus, food], i) => ({
-  id: `r${i}`, rawName: name.toUpperCase(), name, quantity, unit, price,
-  include: true, matchStatus,
-  matchedFood: food ? { food_db_id: `usda:${i}`, name: food, macros_per_unit: {} } : null
+  ['GOODGATH JASMINE RICE 5LB', 'Jasmine Rice', 1, 'pack', 6.49, 'done', FOODS.rice, {}, false],
+  ['2 X OIKOS GREEK YOGURT', 'Oikos Greek Yogurt', 2, 'container', 2.58, 'done', FOODS.yogurt, {}, true],
+  ['ZUCCHINI GREEN', 'Zucchini', 0.778, 'kg', 4.66, 'done', FOODS.zucchini, {}, true],
+  ['GOODGATH SHRP CHDR SLCD', 'Sharp Cheddar Sliced', 1, 'pack', 3.99, 'done', FOODS.cheese, {}, true],
+  ['GRAPES GREEN', 'Grapes Green', 1.174, 'kg', 7.03, 'done', FOODS.grapes, { quantity: true }, true],
+  ['SPECIAL ITEM 18492', 'Item 18492', 1, 'item', 0.99, 'done', null, { name: true, match: true, quantity: true }, false],
+  ['BANANA CAVENDISH', 'Banana Cavendish', 0.442, 'kg', 1.32, 'deciding', null, {}, false]
+].map(([rawName, name, quantity, unit, price, state, food, review, decided], i) => ({
+  id: `r${i}`, rawName, name, quantity, unit, price, state, review, decided,
+  query: name.toLowerCase(), brand: rawName.startsWith('GOODGATH') ? 'Good & Gather' : null,
+  retailer: 'Target', include: true, candidates: [], matchedFood: food
 }));
 
 // SSR can't reach Dexie, so the inventory screen is assembled from real
@@ -115,6 +145,24 @@ const kitchen = (lens) => wrap(React.createElement('div', { className: 'stack' }
       ...bucketize(fridge, lens).map(shelfSection)))
 ));
 
+const searchFixture = [
+  { food_db_id: 'c1', name: 'Jasmine Rice', brand: 'Good & Gather', cached_at: '2026-09-01',
+    detail: 'Branded', macros_per_unit: { calories: 360, protein_g: 7.1, carbs_g: 79, fat_g: 0.6 } },
+  { food_db_id: 'b1', name: 'Jasmine Rice, Long Grain, 5 Lb Bag', brand: 'Good & Gather',
+    detail: 'Branded', macros_per_unit: { calories: 360, protein_g: 7.1, carbs_g: 79, fat_g: 0.6 } },
+  { food_db_id: 'b2', name: 'Kirkland Signature Jasmine Rice', brand: 'Kirkland Signature',
+    detail: 'Branded', macros_per_unit: { calories: 350, protein_g: 7, carbs_g: 77, fat_g: 0.5 } },
+  { food_db_id: 'b3', name: 'Organic Thai Hom Mali Jasmine Rice', brand: "Trader Joe's",
+    detail: 'Open Food Facts', source: 'off',
+    macros_per_unit: { calories: 355, protein_g: 6.5, carbs_g: 78, fat_g: 1 } },
+  { food_db_id: 'g1', name: 'Rice, white, long-grain, regular, raw, unenriched',
+    detail: 'USDA Foundation', dataset: 'Foundation',
+    macros_per_unit: { calories: 365, protein_g: 7.1, carbs_g: 80, fat_g: 0.7 } },
+  { food_db_id: 'g2', name: 'Rice, white, long-grain, regular, cooked, unenriched, without salt',
+    detail: 'USDA SR Legacy', dataset: 'SR Legacy',
+    macros_per_unit: { calories: 130, protein_g: 2.7, carbs_g: 28, fat_g: 0.3 } }
+];
+
 const screens = {
   kitchen: kitchen('group'),
   'kitchen-macros': kitchen('macro'),
@@ -123,22 +171,39 @@ const screens = {
   })),
   add: wrap(React.createElement(AddMenu, { onClose() {}, onScanReceipt() {} })),
   intake: wrap(React.createElement(MacrosSummary)),
-  receipt: React.createElement(
-    'div', { className: 'card stack modal', style: { maxWidth: '48rem' } },
-    React.createElement('div', { className: 'row', style: { justifyContent: 'space-between' } },
-      React.createElement('h2', null, 'Scan a receipt'),
-      React.createElement('button', { className: 'link-button' }, 'Close')),
-    React.createElement('div', { className: 'receipt-rows' },
-      receiptRows.map((row) =>
-        React.createElement(ReceiptRow, { key: row.id, row, onChange() {} }))),
-    React.createElement('div', { className: 'row receipt-footer' },
-      React.createElement('label', { className: 'row receipt-destination' },
-        React.createElement('span', { className: 'label muted' }, 'Put in'),
-        React.createElement('select', { defaultValue: 'fridge' },
-          React.createElement('option', { value: 'fridge' }, 'fridge'))),
-      React.createElement('span', { className: 'label muted' }, '9 of 9'),
-      React.createElement('button', { className: 'primary' }, 'Add to fridge'))
-  )
+  receipt: React.createElement(ReceiptReview, {
+    rows: receiptRows, onChange() {}, onSave() {}, onClose() {},
+    location: 'pantry', onLocationChange() {}, saving: false, note: '', error: ''
+  }),
+  'receipt-done': React.createElement(ReceiptReview, {
+    rows: receiptRows.map((r) => ({ ...r, decided: true, include: r.name !== 'Item 18492' })),
+    onChange() {}, onSave() {}, onClose() {},
+    location: 'pantry', onLocationChange() {}, saving: false, note: '', error: ''
+  }),
+  // The card that matters most: the one the resolver could not place. It has
+  // to look like an honest "I don't know", not like an error.
+  'receipt-unsure': React.createElement(ReceiptReview, {
+    rows: [receiptRows.find((r) => r.matchedFood === null && r.state === 'done'),
+           ...receiptRows.filter((r) => !(r.matchedFood === null && r.state === 'done'))],
+    onChange() {}, onSave() {}, onClose() {},
+    location: 'pantry', onLocationChange() {}, saving: false, note: '', error: ''
+  }),
+  // SSR can't fetch, so the populated list is rendered from fixture rows that
+  // match the real result shape — including the awkward ones: a long branded
+  // description, a row with no photo, a generic entry with no brand at all.
+  search: React.createElement('div', { className: 'sheet-backdrop' },
+    React.createElement('div', { className: 'sheet search-sheet' },
+      React.createElement('div', { className: 'sheet-grip' }),
+      React.createElement('div', { className: 'sheet-head' },
+        React.createElement('h2', null, 'Find product'),
+        React.createElement('button', { className: 'link-button' }, 'Close')),
+      React.createElement('input', {
+        className: 'search-field', readOnly: true, defaultValue: 'jasmine rice'
+      }),
+      React.createElement(SearchResults, {
+        sections: groupResults(searchFixture),
+        flat: searchFixture, active: 0, onHover() {}, onPick() {}
+      })))
 };
 
 // The sandbox ships Chromium at a fixed path rather than in Playwright's
@@ -152,7 +217,11 @@ const sizes = { phone: 390, laptop: 1000 };
 for (const [name, el] of Object.entries(screens)) {
   const body = renderToString(el);
   for (const [size, width] of Object.entries(sizes)) {
-    const page = await browser.newPage({ viewport: { width, height: 900 } });
+    // Animations are captured mid-flight otherwise, which makes a healthy
+    // card look washed out. The CSS already honours this preference.
+    const page = await browser.newPage({
+      viewport: { width, height: 900 }, reducedMotion: 'reduce'
+    });
     await page.setContent(
       `<style>${styles}</style><body style="background:var(--bg)">
        <div class="shell stack">${body}</div></body>`,
