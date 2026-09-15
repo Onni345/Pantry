@@ -63,7 +63,7 @@ export function setApiKey(key) {
 }
 
 /** Cache key: the food, not the shopping trip. Two bags of carrots share one. */
-export const shelfLifeKey = (name, category) =>
+const shelfLifeKey = (name, category) =>
   `${String(name || '').toLowerCase().trim().replace(/\s+/g, ' ')}|${category || ''}`;
 
 const LOCATIONS = ['unopened_fridge', 'opened_fridge', 'freezer', 'pantry'];
@@ -76,7 +76,7 @@ const LOCATIONS = ['unopened_fridge', 'opened_fridge', 'freezer', 'pantry'];
  * than stored, because a wrong expiry date is worse than no expiry date — it
  * gets acted on.
  */
-export function parseShelfLife(raw) {
+function parseShelfLife(raw) {
   let data = raw;
   if (typeof raw === 'string') {
     const match = raw.match(/\{[\s\S]*\}/);
@@ -157,7 +157,7 @@ async function requestOnce(model, parts, schema, maxOutputTokens, signal) {
  * string is accepted too and wrapped as a single text part, since most
  * callers only ever send text.
  */
-export async function callGeminiJSON(parts, schema, { maxOutputTokens = 300, signal } = {}) {
+async function callGeminiJSON(parts, schema, { maxOutputTokens = 300, signal } = {}) {
   const partsArray = typeof parts === 'string' ? [{ text: parts }] : parts;
   const remembered = rememberedModel();
   const order = remembered ? [remembered, ...MODELS.filter((m) => m !== remembered)] : MODELS;
@@ -214,7 +214,7 @@ export async function callGeminiJSON(parts, schema, { maxOutputTokens = 300, sig
  * Shelf life for a food, in days per storage location.
  * Returns null when there is no key and nothing cached — never guesses.
  */
-export async function getShelfLife(name, category, { signal } = {}) {
+async function getShelfLife(name, category, { signal } = {}) {
   const key = shelfLifeKey(name, category);
 
   const cached = await db.expiry_cache.get(key);
@@ -238,7 +238,7 @@ export async function getShelfLife(name, category, { signal } = {}) {
  * Which shelf-life figure applies to an item sitting in a given place.
  * Unopened is assumed, since an item is logged when it is bought.
  */
-export function daysForLocation(shelfLife, location) {
+function daysForLocation(shelfLife, location) {
   if (!shelfLife) return null;
   if (location === 'freezer') return shelfLife.freezer ?? shelfLife.unopened_fridge ?? null;
   if (location === 'fridge') return shelfLife.unopened_fridge ?? shelfLife.opened_fridge ?? null;
@@ -246,7 +246,7 @@ export function daysForLocation(shelfLife, location) {
   return null;
 }
 
-export function expiryDateFrom(days, from = new Date()) {
+function expiryDateFrom(days, from = new Date()) {
   if (!days) return null;
   const d = new Date(from);
   d.setHours(0, 0, 0, 0);

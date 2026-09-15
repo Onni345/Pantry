@@ -138,8 +138,6 @@ export function acceptFoodMatch(queryName, food) {
   return `${food.name} ${food.brand || ''}`.toLowerCase().includes(first);
 }
 
-/** Does any field on this row want a human's eye? */
-export const needsReview = (row) => Object.values(row.review || {}).some(Boolean);
 
 /**
  * How sure we are, as one word, because that is what the card shows.
@@ -156,8 +154,6 @@ export function confidenceOf(row) {
   return 'high';
 }
 
-/** How many rows are still flagged — what the footer counts down. */
-export const reviewCount = (rows) => rows.filter((r) => r.include && needsReview(r)).length;
 
 /** Rows the user has kept and given a usable name — what Save sends on. */
 export function includedRows(rows) {

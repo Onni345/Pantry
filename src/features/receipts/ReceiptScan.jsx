@@ -142,7 +142,12 @@ export default function ReceiptScan({ onClose }) {
           location,
           category: guessCategory(row.name) || 'other',
           food_db_id: food?.food_db_id || null,
-          grams_each: grams
+          grams_each: grams,
+          // The matched product knows how big it is. Keeping that is what
+          // makes "26% of the jar" sayable and per-100 g macros usable
+          // without anyone typing a weight — the scan path already did this
+          // and the two had drifted apart.
+          pack_grams: food?.package_grams ?? null
         });
       }
       onClose();
@@ -170,7 +175,7 @@ export default function ReceiptScan({ onClose }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="card stack modal receipt-scan" onClick={(e) => e.stopPropagation()}>
+      <div className="card stack modal receipt-scan" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Scan a receipt">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <h2>Scan a receipt</h2>
           <button className="link-button" onClick={onClose}>Close</button>

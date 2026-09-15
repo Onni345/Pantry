@@ -146,7 +146,7 @@ export default function ScanSession({ onClose }) {
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="card stack modal scan-session" onClick={(e) => e.stopPropagation()}>
+      <div className="card stack modal scan-session" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Scan">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <h2>Scan</h2>
           <button className="link-button" onClick={onClose}>Close</button>

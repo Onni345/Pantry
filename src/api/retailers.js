@@ -21,7 +21,7 @@
  * the first is the chain's flagship grocery label. Names are written the way
  * the food databases spell them, because that is what gets searched.
  */
-export const RETAILERS = {
+const RETAILERS = {
   target: {
     name: 'Target',
     match: /\btarget\b/i,

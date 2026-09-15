@@ -204,5 +204,3 @@ export function describe(item) {
   return { main: formatGrams(qty), aside: null };
 }
 
-/** The one-line form, for places with no room for two. */
-export const describeLine = (item) => describe(item).main;

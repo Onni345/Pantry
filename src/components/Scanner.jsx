@@ -36,7 +36,20 @@ export default function Scanner({ onCode, onClose, hint = 'Point at the barcode'
         if ('BarcodeDetector' in window) {
           detector = new window.BarcodeDetector({ formats: FORMATS });
         } else {
-          const { BarcodeDetector } = await import('barcode-detector/ponyfill');
+          const [{ BarcodeDetector, setZXingModuleOverrides }, { default: wasmUrl }] =
+            await Promise.all([
+              import('barcode-detector/ponyfill'),
+              import('zxing-wasm/reader/zxing_reader.wasm?url')
+            ]);
+          // Left alone, the ponyfill fetches its WebAssembly from jsdelivr at
+          // the moment you point the camera at something — which is the one
+          // moment a local-first app is least likely to have a network, and
+          // makes scanning depend on a third party being up. Bundling it
+          // means Vite fingerprints the file and the service worker
+          // precaches it, so the second scan works on a plane.
+          setZXingModuleOverrides({
+            locateFile: (path, prefix) => (path.endsWith('.wasm') ? wasmUrl : prefix + path)
+          });
           detector = new BarcodeDetector({ formats: FORMATS });
         }
 

@@ -157,10 +157,6 @@ const hasMacros = (r) =>
     ([k, v]) => k !== 'basis' && v !== null && v !== 0
   );
 
-/** How a food reads on one line: "Jasmine Rice — Good & Gather". */
-export function foodLabel(food) {
-  return [food?.name, food?.brand].filter(Boolean).join(' — ');
-}
 
 async function getJson(url, signal) {
   const res = await fetch(url, { signal });

@@ -166,6 +166,34 @@ check('scan session (camera open, nothing scanned)', () =>
 check('scanner on a machine with no camera API', () =>
   renderToString(React.createElement(Scanner, { onCode() {}, onClose() {} })));
 
+// A scanned row is shaped differently from a receipt row — no price, no
+// retailer, no expanded query — and both go through the same review screen.
+// This is the seam where the two features meet, so it gets its own check.
+const scannedRow = {
+  id: 's1', code: '016000275287', rawName: '016000275287', name: 'Cheerios Cereal',
+  kind: 'barcode', quantity: 1, unit: 'pack', price: null, include: true, decided: false,
+  state: 'done', candidates: [], review: {}, retailer: null, brand: null,
+  matchedFood: {
+    food_db_id: 'usda:2517161', name: 'Cheerios Cereal', brand: 'General Mills',
+    package_text: '12 oz', package_grams: 340, serving_text: '1.5 cup', serving_grams: 39,
+    macros_per_unit: { basis: 'per_100g', calories: 367, protein_g: 11.8, carbs_g: 74, fat_g: 6.2 }
+  }
+};
+check('review screen accepts a scanned row, not only a receipt one', () =>
+  renderToString(React.createElement(ReceiptReview, {
+    rows: [scannedRow], onChange() {}, onSave() {}, onClose() {},
+    location: 'pantry', onLocationChange() {}, saving: false, note: '', error: ''
+  })));
+check('item card for a scanned row with no price', () =>
+  renderToString(React.createElement(ItemCard, { row: scannedRow, onEdit() {} })));
+check('item card for a produce sticker', () =>
+  renderToString(React.createElement(ItemCard, {
+    row: { ...scannedRow, kind: 'produce', unit: 'item', name: 'Banana',
+           matchedFood: { food_db_id: 'usda:1', name: 'Bananas, raw',
+                          macros_per_unit: { calories: 89, protein_g: 1.1 } } },
+    onEdit() {}
+  })));
+
 const Settings = (await load('/src/components/Settings.jsx')).default;
 check('settings panel', () =>
   renderToString(wrap(React.createElement(Settings, {

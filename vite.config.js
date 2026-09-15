@@ -25,7 +25,28 @@ export default defineConfig({
         ]
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,png,svg}']
+        globPatterns: ['**/*.{js,css,html,png,svg}'],
+
+        // The barcode decoder is a 1.1 MB WebAssembly module, and it is
+        // deliberately NOT in the glob above. Precaching downloads it during
+        // install for everyone — including Chrome and Android, where the
+        // browser has its own BarcodeDetector and this file is never touched.
+        // Caching it on first use instead costs those people nothing, and
+        // costs an iPhone one download, after which scanning works offline
+        // like everything else.
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.endsWith('.wasm'),
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'wasm',
+              // Fingerprinted by Vite, so a given URL never changes content
+              // and there is nothing to revalidate.
+              expiration: { maxEntries: 4 },
+              cacheableResponse: { statuses: [0, 200] }
+            }
+          }
+        ]
       }
     })
   ]

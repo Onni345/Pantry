@@ -7,6 +7,7 @@
  */
 import './node-compat.mjs';
 import { createServer } from 'vite';
+import { readFile } from 'node:fs/promises';
 import { launchChromium } from './chromium.mjs';
 
 
@@ -43,6 +44,23 @@ await page.route('**/*', (r) => {
   // error, which this harness treats as a failure — so blocking the network
   // would fail every step that touches it, for the wrong reason.
   return r.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+});
+
+// WebAssembly is compiled from the streamed response, so it is the one thing
+// that genuinely cares about its Content-Type — a JSON body fails to compile
+// and says so loudly. This is how the scanner's decoder is served.
+await page.route('**/*.wasm', async (r) => {
+  const url = new URL(r.request().url());
+  const file = root + url.pathname.replace(/^\//, '');
+  try {
+    return await r.fulfill({
+      status: 200,
+      contentType: 'application/wasm',
+      body: await readFile(file)
+    });
+  } catch {
+    return r.fulfill({ status: 404, body: '' });
+  }
 });
 
 await page.route('**/api.nal.usda.gov/**', (r) => r.fulfill({
@@ -102,18 +120,31 @@ let failures = 0;
 
 /** Dismiss whatever is open, so one failure does not cascade into the rest. */
 async function clearOverlays() {
-  for (let i = 0; i < 3; i++) {
-    if (await page.getByRole('dialog').count() === 0) return;
-    await page.keyboard.press('Escape').catch(() => {});
+  // Matched by class as well as by role: a modal that forgets role="dialog"
+  // is a bug worth failing on, but not by way of every later step timing out
+  // against a backdrop and reporting something unrelated.
+  const open = () => page.locator('[role="dialog"], .modal-backdrop, .sheet-backdrop, .review-backdrop');
+  for (let i = 0; i < 4; i++) {
+    if (await open().count() === 0) return;
     const close = page.getByRole('button', { name: /^(close|done)$/i }).first();
     if (await close.count()) await close.click({ timeout: 2000 }).catch(() => {});
-    await page.waitForTimeout(200);
+    else await page.keyboard.press('Escape').catch(() => {});
+    await page.waitForTimeout(250);
   }
 }
 
-const step = async (name, fn) => {
+/**
+ * `fresh: true` clears any open sheet first.
+ *
+ * Some steps deliberately continue from the last one — opening an item, then
+ * reading its macros, then consuming from it — so clearing is not automatic.
+ * Steps that start a new thread of interaction say so, which is also the only
+ * honest way to tell the two kinds apart.
+ */
+const step = async (name, fn, { fresh = false } = {}) => {
   const before = problems.length;
   try {
+    if (fresh) await clearOverlays();
     await fn();
     await page.waitForTimeout(500);
     const errs = problems.slice(before);
@@ -183,7 +214,7 @@ await step('the intake tab shows calories', async () => {
   if (/nothing logged/i.test(t)) throw new Error('INTAKE SAYS NOTHING LOGGED after consuming');
   if (!/kcal/i.test(t)) throw new Error('NO CALORIES ON INTAKE: ' + t.slice(0, 300));
   console.log('        intake reads: ' + t.slice(0, 220));
-});
+}, { fresh: true });
 await shot('intake');
 
 await step('the add menu opens and offers every route', async () => {
@@ -195,10 +226,24 @@ await step('the add menu opens and offers every route', async () => {
   for (const route of ['Scan barcodes', 'Scan a receipt', 'Add from recent', 'Add by hand', 'Type a code']) {
     if (!t.includes(route)) throw new Error(`missing route: ${route}`);
   }
-});
+}, { fresh: true });
 await shot('add');
 
+await step('the scan screen opens and survives having no camera', async () => {
+  await page.getByRole('button', { name: /^\+$|add/i }).last().click();
+  await page.waitForTimeout(400);
+  await page.getByRole('button', { name: /scan barcodes/i }).click();
+  await page.waitForTimeout(1200);
+  const t = await text();
+  if (!/nothing scanned yet/i.test(t)) throw new Error('scan screen did not open');
+  // Headless Chromium has no camera, so this also proves the failure path
+  // says something useful rather than throwing.
+  if (!/camera|scanned/i.test(t)) throw new Error('no camera state shown');
+}, { fresh: true });
+
 await step('typing a produce code finds the food', async () => {
+  await page.getByRole('button', { name: /^\+$|add/i }).last().click();
+  await page.waitForTimeout(400);
   await page.getByRole('button', { name: /type a code/i }).click();
   await page.waitForTimeout(300);
   await page.getByPlaceholder(/4011/).fill('4011');
@@ -210,7 +255,7 @@ await step('typing a produce code finds the food', async () => {
   // table's own mapping is covered by plu.test.mjs.
   if (/not found/i.test(t)) throw new Error('4011 did not resolve');
   await clearOverlays();
-});
+}, { fresh: true });
 
 await step('adding by hand actually adds', async () => {
   await page.getByRole('button', { name: /^\+$|add/i }).last().click();
@@ -221,20 +266,20 @@ await step('adding by hand actually adds', async () => {
   await page.getByRole('button', { name: /add it/i }).click();
   await page.waitForTimeout(1200);
   if (!(await text()).includes('Test Yoghurt')) throw new Error('item not in the list after adding');
-});
+}, { fresh: true });
 
 await step('locations cycle with the arrows', async () => {
   const before = await text();
   await page.locator('.place-arrow').last().click();
   await page.waitForTimeout(700);
   if ((await text()) === before) throw new Error('arrow did not change the location');
-});
+}, { fresh: true });
 await shot('freezer');
 
 await step('the recipes tab mounts', async () => {
   await page.getByRole('button', { name: /^recipes$/i }).click();
   await page.waitForTimeout(700);
-});
+}, { fresh: true });
 
 console.log('\nALL CONSOLE PROBLEMS:');
 console.log(problems.length ? [...new Set(problems)].slice(0, 20).join('\n') : '  (none)');

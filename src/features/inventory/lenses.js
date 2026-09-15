@@ -69,7 +69,7 @@ const BUCKETS = {
 };
 
 /** CSS custom-property name carrying this bucket's colour. */
-export const toneVar = (bucket) => `--tone-${bucket.toLowerCase().replace(/[^a-z]+/g, '-')}`;
+const toneVar = (bucket) => `--tone-${bucket.toLowerCase().replace(/[^a-z]+/g, '-')}`;
 
 /**
  * Items bucketed by the given lens, in the lens's own order, with a
