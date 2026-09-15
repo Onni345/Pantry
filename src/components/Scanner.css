@@ -1,0 +1,31 @@
+/* The camera fills the sheet. Everything else is one line of chrome. */
+.scanner { position: relative; border-radius: var(--radius); overflow: hidden; background: #000; }
+
+.scanner-video {
+  display: block;
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+}
+
+/* A window to aim through. Barcodes are wide and short, so the frame is too —
+   it tells you how to hold the phone without saying anything. */
+.scanner-frame {
+  position: absolute;
+  left: 10%;
+  right: 10%;
+  top: 34%;
+  height: 32%;
+  border: 2px solid rgba(255, 255, 255, 0.9);
+  border-radius: var(--radius);
+}
+
+.scanner-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  background: var(--surface);
+}
+.scanner-bar .label { text-align: right; }

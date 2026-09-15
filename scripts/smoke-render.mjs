@@ -87,7 +87,10 @@ check('item sheet — counted', () => renderToString(wrap(React.createElement(It
 check('item sheet — weighed', () => renderToString(wrap(React.createElement(ItemSheet, { item: weightItem, onClose() {} }))));
 check('item sheet — finished', () => renderToString(wrap(React.createElement(ItemSheet, { item: emptyItem, onClose() {} }))));
 
-check('add menu', () => renderToString(wrap(React.createElement(AddMenu, { onClose() {}, onScanReceipt() {} }))));
+check('add menu', () =>
+  renderToString(wrap(React.createElement(AddMenu, {
+    onClose() {}, onScanReceipt() {}, onScanCode() {}
+  }))));
 
 const MacrosSummary = (await load('/src/features/macros/MacrosSummary.jsx')).default;
 check('macros summary', () => renderToString(wrap(React.createElement(MacrosSummary))));
@@ -155,6 +158,13 @@ check('receipt review — no rows renders nothing, quietly', () => {
 
 check('food search sheet', () =>
   renderToString(React.createElement(FoodSearchSheet, { onPick() {}, onClose() {} })));
+
+const ScanSession = (await load('/src/features/scan/ScanSession.jsx')).default;
+const Scanner = (await load('/src/components/Scanner.jsx')).default;
+check('scan session (camera open, nothing scanned)', () =>
+  renderToString(wrap(React.createElement(ScanSession, { onClose() {} }))));
+check('scanner on a machine with no camera API', () =>
+  renderToString(React.createElement(Scanner, { onCode() {}, onClose() {} })));
 
 const Settings = (await load('/src/components/Settings.jsx')).default;
 check('settings panel', () =>

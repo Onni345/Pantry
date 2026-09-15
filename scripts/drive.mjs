@@ -39,7 +39,10 @@ await page.route('**/*', (r) => {
   if (url.startsWith('http://localhost') || url.startsWith('data:') || url.startsWith('blob:')) {
     return r.continue();
   }
-  return r.abort();
+  // Fulfilled empty rather than aborted: an abort surfaces as a console
+  // error, which this harness treats as a failure — so blocking the network
+  // would fail every step that touches it, for the wrong reason.
+  return r.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
 });
 
 await page.route('**/api.nal.usda.gov/**', (r) => r.fulfill({
@@ -189,13 +192,29 @@ await step('the add menu opens and offers every route', async () => {
   await page.getByRole('button', { name: /^\+$|add/i }).last().click();
   await page.waitForTimeout(500);
   const t = await text();
-  for (const route of ['Scan a receipt', 'Add from recent', 'Add by hand', 'Add by barcode']) {
+  for (const route of ['Scan barcodes', 'Scan a receipt', 'Add from recent', 'Add by hand', 'Type a code']) {
     if (!t.includes(route)) throw new Error(`missing route: ${route}`);
   }
 });
 await shot('add');
 
+await step('typing a produce code finds the food', async () => {
+  await page.getByRole('button', { name: /type a code/i }).click();
+  await page.waitForTimeout(300);
+  await page.getByPlaceholder(/4011/).fill('4011');
+  await page.getByRole('button', { name: /look it up/i }).click();
+  await page.waitForTimeout(1200);
+  const t = await text();
+  // The stub returns an egg for any USDA query, so what is being checked is
+  // that 4011 resolved to a NAME and reached the add form at all — the PLU
+  // table's own mapping is covered by plu.test.mjs.
+  if (/not found/i.test(t)) throw new Error('4011 did not resolve');
+  await clearOverlays();
+});
+
 await step('adding by hand actually adds', async () => {
+  await page.getByRole('button', { name: /^\+$|add/i }).last().click();
+  await page.waitForTimeout(400);
   await page.getByRole('button', { name: /add by hand/i }).click();
   await page.waitForTimeout(400);
   await page.getByPlaceholder('Eggs').fill('Test Yoghurt');

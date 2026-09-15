@@ -33,7 +33,8 @@ const css = [
   '/src/features/inventory/groups.css', '/src/features/inventory/sheet.css',
   '/src/features/inventory/addmenu.css', '/src/features/receipts/review.css',
   '/src/components/FoodSearchSheet.css', '/src/components/ServingPicker.css',
-  '/src/components/PackSize.css',
+  '/src/components/PackSize.css', '/src/components/Scanner.css',
+  '/src/features/scan/scan.css',
   '/src/features/onboarding/onboarding.css'
 ];
 const styles = (await Promise.all(
@@ -185,7 +186,9 @@ const screens = {
     },
     onClose() {}
   })),
-  add: wrap(React.createElement(AddMenu, { onClose() {}, onScanReceipt() {} })),
+  add: wrap(React.createElement(AddMenu, {
+    onClose() {}, onScanReceipt() {}, onScanCode() {}
+  })),
   intake: wrap(React.createElement(MacrosSummary)),
   receipt: React.createElement(ReceiptReview, {
     rows: receiptRows, onChange() {}, onSave() {}, onClose() {},

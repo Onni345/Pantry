@@ -7,6 +7,7 @@ import CategoryRows from './CategoryRows.jsx';
 import { bucketize } from './lenses.js';
 import { usePager } from './usePager.js';
 import ReceiptScan from '../receipts/ReceiptScan.jsx';
+import ScanSession from '../scan/ScanSession.jsx';
 import { LOCATIONS } from '../../db/schema.js';
 import './inventory.css';
 
@@ -30,6 +31,7 @@ export default function InventoryList() {
   const [open, setOpen] = useState(null);      // item being viewed in the sheet
   const [adding, setAdding] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [codeScan, setCodeScan] = useState(false);
   const sections = useRef({});
 
   const here = useMemo(
@@ -155,9 +157,11 @@ export default function InventoryList() {
         <AddMenu
           onClose={() => setAdding(false)}
           onScanReceipt={() => { setAdding(false); setScanning(true); }}
+          onScanCode={() => { setAdding(false); setCodeScan(true); }}
         />
       )}
       {scanning && <ReceiptScan onClose={() => setScanning(false)} />}
+      {codeScan && <ScanSession onClose={() => setCodeScan(false)} />}
     </div>
   );
 }

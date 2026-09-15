@@ -7,6 +7,7 @@ import FoodSearchSheet from '../../components/FoodSearchSheet.jsx';
 import ServingPicker from '../../components/ServingPicker.jsx';
 import PackSize from '../../components/PackSize.jsx';
 import '../../components/PackSize.css';
+import { isPluCode, pluQuery } from '../../api/plu.js';
 import { recentNames } from '../../db/queries.js';
 import { NATURAL_UNITS, WEIGHT_UNIT_NAMES } from '../../units.js';
 import { LOCATIONS } from '../../db/schema.js';
@@ -22,7 +23,7 @@ import './addmenu.css';
  * that route asks for the number rather than pretending to scan — typing
  * thirteen digits genuinely works today, and a fake camera button would not.
  */
-export default function AddMenu({ onScanReceipt, onClose }) {
+export default function AddMenu({ onScanReceipt, onScanCode, onClose }) {
   const [route, setRoute] = useState(null); // null | 'manual' | 'barcode' | 'recent'
 
   if (route === 'manual') return <ManualAdd onDone={onClose} onBack={() => setRoute(null)} />;
@@ -38,9 +39,16 @@ export default function AddMenu({ onScanReceipt, onClose }) {
           <button className="link-button" onClick={onClose}>Close</button>
         </div>
 
-        <button className="primary route-button" onClick={onScanReceipt}>
+        <button className="primary route-button" onClick={onScanCode}>
+          <span className="route-title">Scan barcodes</span>
+          <span className="route-note">
+            Exact products, one after another — produce stickers too
+          </span>
+        </button>
+
+        <button className="route-button" onClick={onScanReceipt}>
           <span className="route-title">Scan a receipt</span>
-          <span className="route-note">A whole shop at once</span>
+          <span className="route-note">A whole shop at once, from the paper</span>
         </button>
 
         <button className="route-button" onClick={() => setRoute('recent')}>
@@ -54,8 +62,8 @@ export default function AddMenu({ onScanReceipt, onClose }) {
         </button>
 
         <button className="route-button" onClick={() => setRoute('barcode')}>
-          <span className="route-title">Add by barcode</span>
-          <span className="route-note">Type the number under the bars</span>
+          <span className="route-title">Type a code</span>
+          <span className="route-note">A barcode number, or a produce sticker</span>
         </button>
       </div>
     </div>
@@ -227,12 +235,20 @@ function BarcodeAdd({ onDone, onBack }) {
   const [state, setState] = useState('idle'); // idle | looking | found | none
   const [food, setFood] = useState(null);
 
+  const trimmed = code.trim();
+  const valid = /^\d{8,14}$/.test(trimmed) || isPluCode(trimmed);
+
   async function look(e) {
     e.preventDefault();
-    if (!/^\d{8,14}$/.test(code.trim())) return;
+    if (!valid) return;
     setState('looking');
     try {
-      const { results } = await lookupFood(code.trim(), { limit: 1 });
+      // Four or five digits is a produce sticker, which resolves through a
+      // table shipped in the app rather than a lookup; anything longer is a
+      // barcode and goes to the databases.
+      const query = isPluCode(trimmed) ? pluQuery(trimmed) : trimmed;
+      if (!query) { setState('none'); return; }
+      const { results } = await lookupFood(query, { limit: 1 });
       if (results[0]) { setFood(results[0]); setState('found'); }
       else setState('none');
     } catch {
@@ -249,21 +265,21 @@ function BarcodeAdd({ onDone, onBack }) {
     <Panel title="Add by barcode" onBack={onBack} onClose={onDone}>
       <form className="stack-tight" onSubmit={look}>
         <label className="stack-tight">
-          <span className="label muted">The number under the bars</span>
+          <span className="label muted">Barcode number, or a 4–5 digit produce sticker</span>
           <input
             value={code}
             onChange={(e) => setCode(e.target.value)}
             inputMode="numeric"
-            placeholder="5000112637922"
+            placeholder="5000112637922 or 4011"
             autoFocus
           />
         </label>
-        <button className="primary" type="submit" disabled={state === 'looking' || !/^\d{8,14}$/.test(code.trim())}>
+        <button className="primary" type="submit" disabled={state === 'looking' || !valid}>
           {state === 'looking' ? 'Looking…' : 'Look it up'}
         </button>
         {state === 'none' && (
           <p className="label muted">
-            Not in the database. Add it by hand instead — the name is enough.
+            Not found. Add it by hand instead — the name is enough.
           </p>
         )}
       </form>

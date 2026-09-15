@@ -188,6 +188,18 @@ async function searchUsda(query, signal) {
   return (data.foods || []).map(fromUsda);
 }
 
+/**
+ * Open Food Facts asks callers to identify themselves. A browser cannot set
+ * User-Agent — it is a forbidden header for fetch — so their own app_name /
+ * app_version parameters are the compliant equivalent, and being identifiable
+ * is what keeps the app from being treated as a bot and rate-limited.
+ *
+ * Read limits are 15 requests a minute PER IP, which is an argument for
+ * calling from the browser rather than proxying: every user brings their own
+ * IP instead of sharing one ceiling.
+ */
+const OFF_ID = 'app_name=Pantry&app_version=0.1';
+
 const OFF_FIELDS = [
   'code', 'product_name', 'brands', 'brand_owner', 'quantity', 'product_quantity',
   'serving_size', 'serving_quantity', 'nutriments', 'image_front_small_url', 'image_small_url'
@@ -196,19 +208,72 @@ const OFF_FIELDS = [
 async function searchOff(query, signal) {
   const url =
     `${OFF_SEARCH}?search_terms=${encodeURIComponent(query)}` +
-    `&fields=${OFF_FIELDS}&page_size=25`;
+    `&fields=${OFF_FIELDS}&page_size=25&${OFF_ID}`;
   const data = await getJson(url, signal);
   return (data.products || []).map(fromOff);
 }
 
 const isBarcode = (q) => /^\d{8,14}$/.test(q.trim());
 
+/**
+ * A barcode is the only exact key this app has.
+ *
+ * Everything else — a receipt line, a typed name — is a guess that has to be
+ * ranked, and sometimes judged by a model. A GTIN is the manufacturer's own
+ * identifier for one specific packet, so matching it is a lookup with a right
+ * answer and none of that machinery runs at all.
+ *
+ * Both sources are asked, because neither has everything: USDA Branded is
+ * US-focused with manufacturer-submitted nutrition, Open Food Facts is
+ * broader and carries the product photograph.
+ */
 async function lookupBarcode(code, signal) {
+  const settled = await Promise.allSettled([
+    lookupBarcodeOff(code, signal),
+    lookupBarcodeUsda(code, signal)
+  ]);
+
+  const found = [];
+  for (const r of settled) {
+    if (r.status === 'fulfilled') found.push(...r.value);
+    else if (r.reason?.name === 'AbortError') throw r.reason;
+  }
+  return found;
+}
+
+async function lookupBarcodeOff(code, signal) {
   const data = await getJson(
-    `${OFF_PRODUCT}/${encodeURIComponent(code)}.json?fields=${OFF_FIELDS}`, signal
+    `${OFF_PRODUCT}/${encodeURIComponent(code)}.json?fields=${OFF_FIELDS}&${OFF_ID}`, signal
   );
-  if (!data.product) return [];
-  return [fromOff({ ...data.product, code })];
+  return data?.product ? [fromOff({ ...data.product, code })] : [];
+}
+
+/**
+ * FDC stores every GTIN zero-padded to fourteen digits, and its search
+ * tokenizer does not normalise lengths. A scanner reading a UPC-A hands you
+ * twelve digits, and those twelve digits match nothing at all — not a
+ * ranking problem, a flat zero. So each plausible width is tried, widest
+ * first, and the first that hits wins.
+ *
+ * `gtinUpc:` is a fielded query, which FDC supports. It is used rather than a
+ * bare number so a barcode cannot accidentally match a serving size or an
+ * unrelated description. Note that an unknown field name returns zero hits
+ * rather than an error, so a typo here fails silently.
+ */
+async function lookupBarcodeUsda(code, signal) {
+  const digits = String(code).replace(/\D/g, '');
+  const widths = [14, 13, 12].filter((w) => w >= digits.length);
+
+  for (const width of widths) {
+    const padded = digits.padStart(width, '0');
+    const url =
+      `${USDA_SEARCH}?api_key=${encodeURIComponent(USDA_KEY)}` +
+      `&query=${encodeURIComponent(`gtinUpc:${padded}`)}&dataType=Branded&pageSize=5`;
+    const data = await getJson(url, signal);
+    const foods = (data.foods || []).map(fromUsda);
+    if (foods.length) return foods;
+  }
+  return [];
 }
 
 /** Runs the sources together; one source failing must not sink the search. */
