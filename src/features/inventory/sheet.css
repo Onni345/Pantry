@@ -157,7 +157,9 @@
 }
 .chip .label { font-size: 12px; }
 
-.take-grams input { flex: 1; min-width: 0; }
+.take-grams input, .take-units input { flex: 1; min-width: 0; }
 .take-grams input::-webkit-outer-spin-button,
-.take-grams input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.take-grams input { -moz-appearance: textfield; appearance: textfield; }
+.take-grams input::-webkit-inner-spin-button,
+.take-units input::-webkit-outer-spin-button,
+.take-units input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.take-grams input, .take-units input { -moz-appearance: textfield; appearance: textfield; }

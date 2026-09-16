@@ -139,6 +139,7 @@ export default function ItemSheet({ item, onClose }) {
  */
 function Take({ item, food, busy, onTakeGrams, onTakeUnits, onAddUnits, onFinish }) {
   const [grams, setGrams] = useState('');
+  const [units, setUnits] = useState('');
   const portions = portionsFor(item, food);
   const canGrams = supportsGrams(item);
   const noun = nounOf(item) || 'item';
@@ -158,6 +159,29 @@ function Take({ item, food, busy, onTakeGrams, onTakeUnits, onAddUnits, onFinish
           +1 {noun}
         </button>
       </div>
+
+      {/* -1/+1 covers the common nudge; typing covers "I actually bought 6
+          more" without six taps. */}
+      <form
+        className="row take-units"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const n = Number(units);
+          if (n > 0) { onAddUnits(n); setUnits(''); }
+        }}
+      >
+        <input
+          type="number"
+          inputMode="decimal"
+          min="0"
+          step="any"
+          value={units}
+          onChange={(e) => setUnits(e.target.value)}
+          placeholder={`or type a number of ${pluralize(noun, 2)}`}
+          aria-label={`Number of ${noun} to add`}
+        />
+        <button type="submit" disabled={busy || !(Number(units) > 0)}>Add</button>
+      </form>
 
       {portions.length > 0 && (
         <div className="row wrap take-portions">

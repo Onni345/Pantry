@@ -444,7 +444,9 @@ function Summary({ rows, keeping, location, onLocationChange, onSave, saving, er
       {error && <p className="error label">{error}</p>}
 
       <button className="primary summary-save" onClick={onSave} disabled={saving || keeping.length === 0}>
-        {saving ? 'Adding…' : `Add ${keeping.length} to ${location}`}
+        {saving ? 'Adding…' : keeping.length === 1
+          ? `Add ${keeping[0].name || keeping[0].rawName} to ${location}`
+          : `Add ${keeping.length} items to ${location}`}
       </button>
       <button className="link-button" onClick={onReview}>Go back through them</button>
     </div>
