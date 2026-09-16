@@ -144,9 +144,46 @@
 .sheet-nutrition.is-missing .label { color: var(--review-ink); }
 .sheet-nutrition.is-missing button { white-space: nowrap; padding-right: 0; }
 
-/* Taking some: whole units, then named portions, then grams. Loudest first,
-   because that is also most-used first. */
-.take-step button { flex: 1; font-size: 17px; font-weight: 700; padding: var(--space-3); }
+/* Taking some: one stepper, then named portions, then grams -- quietest
+   last, because that is also least-used last. */
+.stepper {
+  display: flex;
+  align-items: stretch;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+  height: 3rem;
+}
+.stepper-btn {
+  flex: none;
+  width: 3.25rem;
+  font-size: 22px;
+  font-weight: 400;
+  line-height: 1;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+.stepper-btn:first-child { border-right: 1px solid var(--line); }
+.stepper-btn:last-child { border-left: 1px solid var(--line); }
+.stepper-label, .stepper-input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+.stepper-input {
+  font-variant-numeric: tabular-nums;
+  padding: 0;
+}
+.stepper-input::-webkit-outer-spin-button,
+.stepper-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.stepper-input { -moz-appearance: textfield; appearance: textfield; }
 
 .take-portions { gap: var(--space-1) var(--space-2); }
 .chip {
@@ -157,9 +194,10 @@
 }
 .chip .label { font-size: 12px; }
 
-.take-grams input, .take-units input { flex: 1; min-width: 0; }
+.take-grams input { flex: 1; min-width: 0; }
 .take-grams input::-webkit-outer-spin-button,
-.take-grams input::-webkit-inner-spin-button,
-.take-units input::-webkit-outer-spin-button,
-.take-units input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.take-grams input, .take-units input { -moz-appearance: textfield; appearance: textfield; }
+.take-grams input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.take-grams input { -moz-appearance: textfield; appearance: textfield; }
+
+/* Off by default -- see the note above the button in JSX. */
+.take-grams-link { align-self: center; font-size: 13px; }

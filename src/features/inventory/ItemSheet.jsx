@@ -139,49 +139,67 @@ export default function ItemSheet({ item, onClose }) {
  */
 function Take({ item, food, busy, onTakeGrams, onTakeUnits, onAddUnits, onFinish }) {
   const [grams, setGrams] = useState('');
-  const [units, setUnits] = useState('');
+  const [gramsOpen, setGramsOpen] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState('');
   const portions = portionsFor(item, food);
   const canGrams = supportsGrams(item);
   const noun = nounOf(item) || 'item';
   const empty = item.quantity <= 0;
 
+  function commitDraft() {
+    const n = Number(draft);
+    setEditing(false);
+    setDraft('');
+    if (n > 0) onAddUnits(n);
+  }
+
   return (
     <div className="stack-tight take">
-      <div className="row take-step">
+      {/* One control, not three: -1/+1 for the common nudge, and the middle
+          becomes a field the moment you tap it, for "I actually bought 6
+          more" without six taps or a separate row to hold the typed case. */}
+      <div className="stepper" role="group" aria-label={`Adjust ${pluralize(noun, 2)}`}>
         <button
+          type="button" className="stepper-btn"
           onClick={() => onTakeUnits(1)}
           disabled={busy || empty}
           aria-label={`Take one ${noun}`}
         >
-          &minus;1 {noun}
+          &minus;
         </button>
-        <button onClick={() => onAddUnits(1)} disabled={busy} aria-label={`Add one ${noun}`}>
-          +1 {noun}
+        {editing ? (
+          <input
+            className="stepper-input"
+            type="number" inputMode="decimal" min="0" step="any" autoFocus
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onBlur={commitDraft}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); commitDraft(); }
+              if (e.key === 'Escape') { setEditing(false); setDraft(''); }
+            }}
+            placeholder="0"
+            aria-label={`Number of ${pluralize(noun, 2)} to add`}
+          />
+        ) : (
+          <button
+            type="button" className="stepper-label"
+            onClick={() => setEditing(true)}
+            disabled={busy}
+          >
+            {pluralize(noun, 2)}
+          </button>
+        )}
+        <button
+          type="button" className="stepper-btn"
+          onClick={() => onAddUnits(1)}
+          disabled={busy}
+          aria-label={`Add one ${noun}`}
+        >
+          +
         </button>
       </div>
-
-      {/* -1/+1 covers the common nudge; typing covers "I actually bought 6
-          more" without six taps. */}
-      <form
-        className="row take-units"
-        onSubmit={(e) => {
-          e.preventDefault();
-          const n = Number(units);
-          if (n > 0) { onAddUnits(n); setUnits(''); }
-        }}
-      >
-        <input
-          type="number"
-          inputMode="decimal"
-          min="0"
-          step="any"
-          value={units}
-          onChange={(e) => setUnits(e.target.value)}
-          placeholder={`or type a number of ${pluralize(noun, 2)}`}
-          aria-label={`Number of ${noun} to add`}
-        />
-        <button type="submit" disabled={busy || !(Number(units) > 0)}>Add</button>
-      </form>
 
       {portions.length > 0 && (
         <div className="row wrap take-portions">
@@ -202,27 +220,36 @@ function Take({ item, food, busy, onTakeGrams, onTakeUnits, onAddUnits, onFinish
         </div>
       )}
 
+      {/* Quiet by default -- an exact-gram entry is the rare case, so it
+          costs a tap to reveal rather than a permanent row on every item. */}
       {canGrams && (
-        <form
-          className="row take-grams"
-          onSubmit={(e) => {
-            e.preventDefault();
-            const g = Number(grams);
-            if (g > 0 && gramsToDelta(item, g) != null) { onTakeGrams(g); setGrams(''); }
-          }}
-        >
-          <input
-            type="number"
-            inputMode="decimal"
-            min="0"
-            step="any"
-            value={grams}
-            onChange={(e) => setGrams(e.target.value)}
-            placeholder="or an exact number of grams"
-            aria-label="Grams used"
-          />
-          <button type="submit" disabled={busy || !(Number(grams) > 0)}>Use</button>
-        </form>
+        gramsOpen ? (
+          <form
+            className="row take-grams"
+            onSubmit={(e) => {
+              e.preventDefault();
+              const g = Number(grams);
+              if (g > 0 && gramsToDelta(item, g) != null) { onTakeGrams(g); setGrams(''); setGramsOpen(false); }
+            }}
+          >
+            <input
+              type="number"
+              inputMode="decimal"
+              min="0"
+              step="any"
+              autoFocus
+              value={grams}
+              onChange={(e) => setGrams(e.target.value)}
+              placeholder="grams used"
+              aria-label="Grams used"
+            />
+            <button type="submit" disabled={busy || !(Number(grams) > 0)}>Use</button>
+          </form>
+        ) : (
+          <button type="button" className="link-button take-grams-link" onClick={() => setGramsOpen(true)}>
+            Log an exact weight instead
+          </button>
+        )
       )}
 
       {!canGrams && !empty && (
