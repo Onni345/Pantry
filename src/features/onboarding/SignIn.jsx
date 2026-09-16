@@ -71,13 +71,13 @@ export default function SignIn() {
 
             <form className="stack-tight" onSubmit={submitCode}>
               <label className="stack-tight">
-                <span className="label muted">6-digit code from the email</span>
+                <span className="label muted">Code from the email</span>
                 <input
                   value={code}
                   onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
                   inputMode="numeric"
                   autoComplete="one-time-code"
-                  placeholder="123456"
+                  placeholder="12345678"
                   autoFocus
                 />
               </label>
@@ -112,7 +112,7 @@ export default function SignIn() {
               {busy ? 'Sending…' : 'Email me a code'}
             </button>
             <p className="label muted">
-              No password. We email you a 6-digit code that signs this device in.
+              No password. We email you a code that signs this device in.
             </p>
           </form>
         )}
