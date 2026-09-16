@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { sendSignInLink } from '../../auth/household.js';
+import { sendSignInCode, verifySignInCode } from '../../auth/household.js';
 import './onboarding.css';
 
 /**
@@ -8,10 +8,20 @@ import './onboarding.css';
  * "Check your email" is shown for any valid-looking address, whether or not
  * it is on an allowlist — a different message for unknown addresses would let
  * a stranger discover who has access.
+ *
+ * Sign-in is code-only, on purpose. The email Supabase sends also contains a
+ * clickable link, but this screen never mentions it: tapping that link on an
+ * iOS home-screen install opens Safari, a different storage context from the
+ * installed PWA, so the session it creates never reaches the app you're
+ * actually using — it just asks you to sign in again next time. Typing the
+ * code instead never leaves the current tab, so it's the only path that
+ * reliably keeps a phone signed in, and there's no reason to offer the other
+ * one and let someone tap the wrong thing.
  */
 export default function SignIn() {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState('');
+  const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -20,7 +30,22 @@ export default function SignIn() {
     setBusy(true);
     setError('');
     try {
-      setSent(await sendSignInLink(email));
+      setSent(await sendSignInCode(email));
+    } catch (err) {
+      setError(err.message || String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function submitCode(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await verifySignInCode(sent, code);
+      // No further navigation needed — App.jsx's onAuthChange listener picks
+      // up the new session as soon as it lands.
     } catch (err) {
       setError(err.message || String(err));
     } finally {
@@ -40,10 +65,29 @@ export default function SignIn() {
           <section className="card stack">
             <h2>Check your email</h2>
             <p className="muted">
-              If <span className="mono">{sent}</span> has access, a sign-in link is
-              on its way. Open it on this device.
+              If <span className="mono">{sent}</span> has access, a code is on
+              its way.
             </p>
-            <button onClick={() => { setSent(''); setEmail(''); }}>
+
+            <form className="stack-tight" onSubmit={submitCode}>
+              <label className="stack-tight">
+                <span className="label muted">6-digit code from the email</span>
+                <input
+                  value={code}
+                  onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  placeholder="123456"
+                  autoFocus
+                />
+              </label>
+              {error && <p className="error label">{error}</p>}
+              <button className="primary" type="submit" disabled={busy || !code.trim()}>
+                {busy ? 'Checking…' : 'Sign in with code'}
+              </button>
+            </form>
+
+            <button onClick={() => { setSent(''); setEmail(''); setCode(''); setError(''); }}>
               Use a different address
             </button>
           </section>
@@ -65,10 +109,10 @@ export default function SignIn() {
             </label>
             {error && <p className="error label">{error}</p>}
             <button className="primary" type="submit" disabled={busy || !email.trim()}>
-              {busy ? 'Sending…' : 'Email me a link'}
+              {busy ? 'Sending…' : 'Email me a code'}
             </button>
             <p className="label muted">
-              No password. We email you a link that signs this device in.
+              No password. We email you a 6-digit code that signs this device in.
             </p>
           </form>
         )}

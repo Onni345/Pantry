@@ -41,11 +41,14 @@ export async function getSession() {
 export const onAuthChange = (fn) => supabase.auth.onAuthStateChange((_e, session) => fn(session));
 
 /**
- * Emails a sign-in link. Deliberately reports success even for an address
- * that is not on any allowlist: telling a stranger "that address isn't
- * recognised" would turn this box into a way to test who is.
+ * Emails a 6-digit sign-in code (Supabase's own OTP flow — the same request
+ * also puts a clickable link in the email by default, but nothing here reads
+ * or depends on it; the code from `verifySignInCode` below is the only path
+ * this app uses). Deliberately reports success even for an address that is
+ * not on any allowlist: telling a stranger "that address isn't recognised"
+ * would turn this box into a way to test who is.
  */
-export async function sendSignInLink(rawEmail) {
+export async function sendSignInCode(rawEmail) {
   const email = String(rawEmail || '').trim().toLowerCase();
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
     throw new Error('That does not look like an email address.');
@@ -63,6 +66,34 @@ export async function sendSignInLink(rawEmail) {
     throw error;
   }
   return email;
+}
+
+/**
+ * Verifies the 6-digit code from the same email `sendSignInCode` sent,
+ * entirely inside whatever tab is already open.
+ *
+ * This exists because of an iOS quirk: tapping the magic link opens Safari,
+ * not the installed home-screen PWA — they are separate storage contexts on
+ * iOS even though they're the same site, so a session created by the link
+ * never reaches the PWA at all, and it re-asks for sign-in every time it's
+ * opened. Typing the code instead never navigates anywhere, so the session
+ * lands directly in whichever context — Safari tab or installed PWA — the
+ * person is actually using. `persistSession`/`autoRefreshToken` are already
+ * on, so once the session exists in the right place, it just stays there.
+ */
+export async function verifySignInCode(rawEmail, rawCode) {
+  const email = String(rawEmail || '').trim().toLowerCase();
+  const token = String(rawCode || '').trim();
+  if (!/^\d{4,8}$/.test(token)) {
+    throw new Error('That code should just be the digits from the email.');
+  }
+
+  const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
+  if (error) {
+    throw /expired|invalid/i.test(error.message)
+      ? new Error('That code is wrong or has expired. Request a new one.')
+      : error;
+  }
 }
 
 export async function signOut() {
