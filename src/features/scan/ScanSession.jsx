@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useInventory } from '../../context/InventoryContext.jsx';
 import { lookupFood, loadServings, PREFER } from '../../api/foodLookup.js';
 import { readPlu, pluQuery, isPluCode } from '../../api/plu.js';
-import { foodUnitGrams } from '../inventory/amounts.js';
+import { productAmount } from '../inventory/amounts.js';
 import { guessCategory } from '../inventory/categoryGuess.js';
 import Scanner from '../../components/Scanner.jsx';
 import ReceiptReview from '../receipts/ReceiptReview.jsx';
@@ -85,11 +85,18 @@ export default function ScanSession({ onClose }) {
       const best = results[0] || null;
       const full = best ? await loadServings(best) : null;
 
+      // A matched product is always tracked as servings x macros-per-serving
+      // — never the whole package standing in for one serving, which is what
+      // defaulting to `row.unit` ('pack') used to do downstream.
+      const amount = full ? productAmount(full) : null;
+
       updateRow(id, {
         state: 'done',
         candidates: results,
         matchedFood: full,
         name: full?.name || row.name,
+        unit: amount ? amount.unit : row.unit,
+        quantity: amount?.defaultQuantity ?? row.quantity,
         // Nothing found means nothing found — flag it and let the card offer
         // the search, rather than leaving a row that looks settled.
         review: full ? {} : { name: true, match: true }
@@ -105,18 +112,18 @@ export default function ScanSession({ onClose }) {
     try {
       for (const row of rows.filter((r) => r.include && r.name.trim())) {
         const food = row.matchedFood;
-        const { grams } = foodUnitGrams(food, row.unit);
+        const amount = food ? productAmount(food) : null;
         await addItem({
           name: row.name.trim(),
           quantity: row.quantity,
-          unit: row.unit,
+          unit: amount ? amount.unit : row.unit,
           location,
           category: guessCategory(row.name) || 'other',
           food_db_id: food?.food_db_id || null,
-          grams_each: row.serving?.grams ?? grams,
-          // A scanned packet knows its own size, which is exactly what makes
-          // per-100 g macros usable without anyone typing a weight.
-          pack_grams: food?.package_grams ?? null
+          // Always the product's own per-serving weight, never the package
+          // weight standing in for it — see `productAmount`.
+          grams_each: amount ? amount.grams_each : null,
+          pack_grams: null
         });
       }
       onClose();

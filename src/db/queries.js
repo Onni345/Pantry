@@ -423,13 +423,20 @@ export async function getMacroInputs(householdId) {
 }
 
 /* ---------------------------------------------------------------- food cache
- * Local only — never synced. It is a cache of public reference data, so each
- * device rebuilding its own costs one API call and nothing is lost if it is
- * cleared.
+ * A cache of public reference data (USDA / Open Food Facts), keyed by
+ * `food_db_id` rather than by household — the same barcode means the same
+ * food for everyone, so this is shared reference data, not private state.
+ *
+ * It DOES sync (see db/sync.js), and that matters: an item's `food_db_id`
+ * syncs fine on its own, but without the food record behind it, a second
+ * device has an id pointing at nothing until it happens to look the same
+ * food up itself — which is exactly why the same item used to show full
+ * nutrition on one device and "No nutrition attached" on another. Syncing
+ * this table is what makes the two devices agree.
  */
 
 export async function cacheFood(food) {
-  await db.food_cache.put({
+  const record = {
     food_db_id: food.food_db_id,
     name: food.name,
     // Identity, kept whole. A cached food has to be usable for everything a
@@ -451,7 +458,13 @@ export async function cacheFood(food) {
     source: food.source,
     detail: food.detail || '',
     cached_at: now()
+  };
+
+  await db.transaction('rw', db.food_cache, db.pending_sync, async (tx) => {
+    await tx.table('food_cache').put(record);
+    await enqueue(tx, 'food_cache', 'upsert', record);
   });
+
   return food;
 }
 

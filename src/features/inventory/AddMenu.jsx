@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useInventory } from '../../context/InventoryContext.jsx';
 import { lookupFood } from '../../api/foodLookup.js';
-import { foodUnitGrams, defaultServing, servingsFor } from './amounts.js';
+import { foodUnitGrams, defaultServing, servingsFor, isProductFood, productAmount } from './amounts.js';
 import { loadServings } from '../../api/foodLookup.js';
 import FoodSearchSheet from '../../components/FoodSearchSheet.jsx';
 import ServingPicker from '../../components/ServingPicker.jsx';
@@ -70,7 +70,16 @@ export default function AddMenu({ onScanReceipt, onScanCode, onClose }) {
   );
 }
 
-/** Name, how many, what they're called, where it goes. Nothing else. */
+/**
+ * Name, how many, what they're called, where it goes. Nothing else.
+ *
+ * The core rule: a recognised PRODUCT (barcode, brand, a packet with a
+ * nutrition label) is always servings x macros-per-serving -- the only thing
+ * asked is how many servings you have. A GENERIC food keeps the flexible
+ * quantity entry (grams, kg, oz, count, named nouns) it always had. Which
+ * branch this renders is decided by `isProductFood`, not by whether a food
+ * happens to be attached at all.
+ */
 function ManualAdd({ onDone, onBack, initial = {} }) {
   const { addItem } = useInventory();
   const [name, setName] = useState(initial.name || '');
@@ -83,29 +92,50 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  // A picked portion wins outright — it is what the person chose. Otherwise
-  // fall back to working out what one of `unit` weighs.
+  const isProduct = isProductFood(food);
+  // Generic-food picker (eggs, butter, bread, cheese -- staples with
+  // standardised named sizes). Products never use this: they go straight to
+  // servings, below.
+  const usePicker = !isProduct && servingsFor(food).length > 0;
   const per = foodUnitGrams(food, unit);
-  const usePicker = servingsFor(food).length > 0;
-  const gramsEach = serving?.grams ?? per.grams;
+  const product = isProduct ? productAmount(food) : null;
+
+  useEffect(() => {
+    if (!isProduct) return;
+    const p = productAmount(food);
+    setQuantity(String(p.defaultQuantity ?? (p.mode === 'servings' ? 1 : '')));
+  }, [food, isProduct]);
 
   async function submit(e) {
     e.preventDefault();
     if (!name.trim() || busy) return;
     setBusy(true);
     try {
-      await addItem({
-        name: name.trim(),
-        quantity: Number(quantity) || 1,
-        location,
-        category: guessCategory(name) || 'other',
-        // "3 large eggs" stores unit 'egg' and 50 g each, so the list says
-        // "3 eggs" and the macros still work out.
-        unit: usePicker && serving ? servingUnit(serving, unit) : unit,
-        food_db_id: food?.food_db_id || initial.food_db_id || null,
-        grams_each: gramsEach,
-        pack_grams: packGrams
-      });
+      if (isProduct) {
+        await addItem({
+          name: name.trim(),
+          quantity: Number(quantity) || 0,
+          location,
+          category: guessCategory(name) || 'other',
+          unit: product.unit,
+          food_db_id: food?.food_db_id || initial.food_db_id || null,
+          grams_each: product.grams_each,
+          pack_grams: null
+        });
+      } else {
+        await addItem({
+          name: name.trim(),
+          quantity: Number(quantity) || 1,
+          location,
+          category: guessCategory(name) || 'other',
+          // "3 large eggs" stores unit 'egg' and 50 g each, so the list says
+          // "3 eggs" and the macros still work out.
+          unit: usePicker && serving ? servingUnit(serving, unit) : unit,
+          food_db_id: food?.food_db_id || initial.food_db_id || null,
+          grams_each: serving?.grams ?? per.grams,
+          pack_grams: packGrams
+        });
+      }
       onDone();
     } finally {
       setBusy(false);
@@ -136,21 +166,21 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
     <Panel title="Add by hand" onBack={onBack} onClose={onDone}>
       <form className="stack-tight" onSubmit={submit}>
         <label className="stack-tight">
-          <span className="label muted">What is it</span>
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Eggs" autoFocus />
+          <span className="label muted">Name</span>
+          <input
+            value={name} onChange={(e) => setName(e.target.value)}
+            placeholder="Eggs" autoFocus required
+          />
         </label>
 
-        {/* Attaching a product is optional and always has been — but until
-            now there was no way to do it at all from here, which meant a
-            hand-added item could never have macros. */}
+        {/* Product data is mostly backend plumbing for identifying the food
+            and its nutrition -- this is the one line of it worth showing. */}
         <div className="add-product">
           <div className="stack-tight">
             {food ? (
               <>
                 <span>{food.name}</span>
-                <span className="label muted">
-                  {[food.brand, food.package_text].filter(Boolean).join(' \u00b7 ') || food.detail}
-                </span>
+                <span className="label muted">{food.brand || food.detail}</span>
               </>
             ) : (
               <span className="label muted">No nutrition attached</span>
@@ -161,7 +191,26 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
           </button>
         </div>
 
-        {usePicker ? (
+        {isProduct ? (
+          <div className="add-qty">
+            <label className="stack-tight">
+              <span className="label muted">
+                {product.mode === 'servings' ? 'How many servings' : 'How many grams'}
+              </span>
+              <input
+                type="number" inputMode="decimal" min="0" step="any"
+                value={quantity} onChange={(e) => setQuantity(e.target.value)}
+                autoFocus
+              />
+            </label>
+            <label className="stack-tight">
+              <span className="label muted">Where</span>
+              <select value={location} onChange={(e) => setLocation(e.target.value)}>
+                {LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
+              </select>
+            </label>
+          </div>
+        ) : usePicker ? (
           <div className="add-qty is-picker">
             <ServingPicker
               food={food}
@@ -190,7 +239,7 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
             <span className="label muted">Of what</span>
             <select value={unit} onChange={(e) => setUnit(e.target.value)}>
               <optgroup label="Things you count">
-                {['item', ...NATURAL_UNITS.filter((u) => u !== 'item')].map((u) => (
+                {['item', ...NATURAL_UNITS.filter((u) => u !== 'item' && u !== 'serving')].map((u) => (
                   <option key={u} value={u}>{u}</option>
                 ))}
               </optgroup>
@@ -210,14 +259,25 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
         </div>
         )}
 
-        {/* Optional on every product, and the thing that lets per-100 g
-            macros scale to the jar or bag actually in the cupboard. */}
-        <PackSize grams={packGrams} onChange={setPackGrams} label="How big is one?" />
+        {/* Pack size is only meaningful for a generic food someone is
+            manually bridging to a weight -- a recognised product already
+            knows its own serving size and never needs this asked. */}
+        {!isProduct && (
+          <PackSize grams={packGrams} onChange={setPackGrams} label="How big is one?" />
+        )}
 
         <button className="primary" type="submit" disabled={busy || !name.trim()}>
           {busy ? 'Adding…' : 'Add it'}
         </button>
-        {!usePicker && (
+        {isProduct && product.mode === 'servings' && (
+          <p className="label muted">One serving = {product.grams_each} g.</p>
+        )}
+        {isProduct && product.mode === 'weight' && (
+          <p className="label muted">
+            No serving size on file for this product -- enter the total weight instead.
+          </p>
+        )}
+        {!isProduct && !usePicker && (
           <p className="label muted">
             {per.grams != null
               ? `${per.exact ? 'One' : 'About one'} ${unit} = ${per.grams} g${per.basis === 'table' ? ' (estimated)' : ''}.`

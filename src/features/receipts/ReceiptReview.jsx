@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import FoodSearchSheet from '../../components/FoodSearchSheet.jsx';
-import { foodUnitGrams, servingsFor, defaultServing } from '../inventory/amounts.js';
+import { isProductFood, productAmount } from '../inventory/amounts.js';
 import { loadServings } from '../../api/foodLookup.js';
-import ServingPicker from '../../components/ServingPicker.jsx';
 import { confidenceOf, includedRows } from './receipts.js';
 import { WEIGHT_UNIT_NAMES, NATURAL_UNITS } from '../../units.js';
 import { LOCATIONS } from '../../db/schema.js';
@@ -173,10 +172,17 @@ export default function ReceiptReview({
                 review: { ...row.review, match: false, name: false }
               });
               setSearching(false);
-              // One extra call, once the product is settled, for the list of
-              // named portions.
+              // One extra call, once the product is settled, for the actual
+              // per-serving weight (loadServings can also fill in a missing
+              // package weight, which productAmount below may use as a
+              // fallback quantity hint).
               const full = await loadServings(food);
-              onChange(row.id, { matchedFood: full, serving: defaultServing(full, row.unit) });
+              const amount = productAmount(full);
+              onChange(row.id, {
+                matchedFood: full,
+                unit: amount.unit,
+                quantity: amount.defaultQuantity ?? row.quantity
+              });
             }}
             onClose={() => setSearching(false)}
           />
@@ -191,7 +197,7 @@ export function ItemCard({ row, onEdit }) {
   const level = confidenceOf(row);
   const food = row.matchedFood;
   const m = food?.macros_per_unit || {};
-  const per = foodUnitGrams(food, row.unit);
+  const amount = food ? productAmount(food) : null;
 
   return (
     <div className="item-card">
@@ -205,7 +211,7 @@ export function ItemCard({ row, onEdit }) {
 
       <p className="card-size label muted">
         {[
-          `${formatQty(row.quantity)} ${row.unit === 'count' ? 'item' : row.unit}${row.quantity === 1 ? '' : 's'}`,
+          `${formatQty(row.quantity)} ${qtyUnitLabel(row.unit, row.quantity)}`,
           food?.package_text
         ].filter(Boolean).join(' · ')}
       </p>
@@ -223,16 +229,16 @@ export function ItemCard({ row, onEdit }) {
         </dl>
       )}
 
-      {/* What one of them weighs, and where that number came from. An
-          estimate says so rather than passing as a measurement. */}
-      {row.serving ? (
+      {/* The product's own nutrition-label serving — never the package
+          weight standing in for it. */}
+      {amount?.mode === 'servings' && (
         <p className="label muted card-grams">
-          {row.serving.label} &mdash; {roundGrams(row.serving.grams)} g each
+          One serving = {roundGrams(amount.grams_each)} g
         </p>
-      ) : per.grams != null && (
+      )}
+      {amount?.mode === 'weight' && (
         <p className="label muted card-grams">
-          {per.exact ? 'One' : 'About one'} {row.unit === 'count' ? 'item' : row.unit} = {roundGrams(per.grams)} g
-          {per.basis === 'table' && ' (estimated)'}
+          No serving size on file — tracked by weight instead.
         </p>
       )}
 
@@ -260,9 +266,10 @@ function Badge({ level, row }) {
 /** Only what needs changing, over the card rather than instead of it. */
 function EditSheet({ row, location, onLocationChange, onChange, onSearch, onClose }) {
   const food = row.matchedFood;
-  const portions = servingsFor(food);
+  const isProduct = isProductFood(food);
+  const amount = isProduct ? productAmount(food) : null;
   const units = useMemo(() => [
-    ...['item', ...NATURAL_UNITS.filter((u) => u !== 'item')],
+    ...['item', ...NATURAL_UNITS.filter((u) => u !== 'item' && u !== 'serving')],
     ...WEIGHT_UNIT_NAMES
   ], []);
 
@@ -299,22 +306,32 @@ function EditSheet({ row, location, onLocationChange, onChange, onSearch, onClos
           />
         </label>
 
-        {portions.length > 0 ? (
-          <div className="edit-grid is-picker">
-            <ServingPicker
-              food={food}
-              quantity={row.quantity}
-              serving={row.serving}
-              onQuantity={(q) => onChange({ quantity: Number(q), review: { ...row.review, quantity: false } })}
-              onServing={(sv) => onChange({ serving: sv, review: { ...row.review, quantity: false } })}
-              label="Quantity"
-            />
+        {isProduct ? (
+          <div className="edit-grid">
+            <label className="stack-tight">
+              <span className="label muted">
+                {amount.mode === 'servings' ? 'Servings' : 'Grams'}
+              </span>
+              <input
+                type="number" inputMode="decimal" min="0" step="any"
+                className={row.review?.quantity ? 'needs-review' : ''}
+                value={row.quantity}
+                onChange={(e) => onChange({
+                  quantity: Number(e.target.value),
+                  unit: amount.unit,
+                  review: { ...row.review, quantity: false }
+                })}
+              />
+            </label>
             <label className="stack-tight">
               <span className="label muted">Where</span>
               <select value={location} onChange={(e) => onLocationChange(e.target.value)}>
                 {LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
               </select>
             </label>
+            {amount.mode === 'servings' && (
+              <p className="label muted">One serving = {amount.grams_each} g.</p>
+            )}
           </div>
         ) : (
           <div className="edit-grid">
@@ -383,6 +400,13 @@ function Summary({ rows, keeping, location, onLocationChange, onSave, saving, er
     </div>
   );
 }
+
+/** Weight units ("g", "kg") stay bare; counted nouns pluralise. */
+const qtyUnitLabel = (unit, quantity) => {
+  if (unit === 'g' || unit === 'kg' || unit === 'oz' || unit === 'lb') return unit;
+  const noun = unit === 'count' ? 'item' : unit;
+  return quantity === 1 ? noun : `${noun}s`;
+};
 
 const round1 = (n) => Math.round(n * 10) / 10;
 /* A package weight printed to the centigram reads like a lab result. Nobody

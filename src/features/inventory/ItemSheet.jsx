@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useInventory } from '../../context/InventoryContext.jsx';
 import { getCachedFood } from '../../api/foodLookup.js';
-import { foodUnitGrams, servingsFor, defaultServing } from './amounts.js';
+import { foodUnitGrams, servingsFor, defaultServing, isProductFood, productAmount } from './amounts.js';
 import { loadServings } from '../../api/foodLookup.js';
 import ServingPicker from '../../components/ServingPicker.jsx';
 import PackSize from '../../components/PackSize.jsx';
@@ -278,8 +278,7 @@ function Details({ item, onDone, removeItem }) {
   const { updateItem } = useInventory();
   const [form, setForm] = useState({
     location: item.location,
-    category: item.category,
-    expiry_date: item.expiry_date || ''
+    category: item.category
   });
   const [food, setFood] = useState(null);
   const [searching, setSearching] = useState(false);
@@ -289,7 +288,10 @@ function Details({ item, onDone, removeItem }) {
 
   const counted = item.base_unit !== 'g';
   const noun = counted && item.display_unit !== 'count' ? item.display_unit : 'item';
-  const sizes = servingsFor(food);
+  const isProduct = isProductFood(food);
+  // A recognised product never shows the named-portion picker — it goes
+  // straight to its own nutrition-label serving, below.
+  const sizes = isProduct ? [] : servingsFor(food);
 
   useEffect(() => {
     let live = true;
@@ -310,15 +312,39 @@ function Details({ item, onDone, removeItem }) {
     flash();
   };
 
-  /** Attaching a product also fills in what one unit weighs, when it can. */
+  /**
+   * Attaching a product also fills in what one unit weighs, when it can.
+   *
+   * An existing item already has a history of events logged in its own
+   * unit, so attaching a product here never changes what the item is
+   * counted in — that would silently reinterpret every past log entry. What
+   * it DOES do for a recognised product is use the product's actual
+   * nutrition-label serving size for that unit's weight, never the whole
+   * package standing in for it — the same number the item picker below is
+   * hidden in favour of.
+   */
   async function attach(raw) {
     const picked = await loadServings(raw);
+    setFood(picked);
+    setSearching(false);
+
+    if (isProductFood(picked)) {
+      const amount = productAmount(picked);
+      // The item's own unit is a package noun ("pack", "item") most of the
+      // time for a scanned product, in which case one of it really is one
+      // serving. If it's some other noun already in use, leave the weight
+      // for the plain grams box below rather than guessing.
+      const next = amount.mode === 'servings' ? amount.grams_each : (item.grams_each || null);
+      setGrams(next ?? '');
+      await updateItem(item.id, { food_db_id: picked.food_db_id, grams_each: next });
+      flash();
+      return;
+    }
+
     const portion = defaultServing(picked, item.display_unit || 'item');
     const per = foodUnitGrams(picked, item.display_unit || 'item');
     const next = portion?.grams ?? per.grams ?? (item.grams_each || null);
-    setFood(picked);
     setGrams(next ?? '');
-    setSearching(false);
     await updateItem(item.id, { food_db_id: picked.food_db_id, grams_each: next });
     flash();
   }
@@ -366,11 +392,21 @@ function Details({ item, onDone, removeItem }) {
         </div>
       </div>
 
+      {/* A recognised product already knows its own serving size — nothing
+          to ask. Everything below is only for a generic/raw food. */}
+      {isProduct && (
+        <p className="label muted">
+          {Number(grams) > 0
+            ? `One serving = ${grams} g.`
+            : 'No serving size on file for this product.'}
+        </p>
+      )}
+
       {/* Counted items need one number to join the two systems up. Where we
           have portions we trust, that number is chosen by name — "large" —
           rather than typed. Where we don't, it stays a plain grams box, which
           is honest about the fact that nobody knows. */}
-      {counted && sizes.length > 0 && (
+      {!isProduct && counted && sizes.length > 0 && (
         <label className="stack-tight">
           <span className="label muted">One {noun} is</span>
           <select
@@ -390,7 +426,7 @@ function Details({ item, onDone, removeItem }) {
         </label>
       )}
 
-      {counted && sizes.length === 0 && (
+      {!isProduct && counted && sizes.length === 0 && (
         <label className="stack-tight">
           <span className="label muted">One {noun} weighs</span>
           <div className="row">
@@ -406,11 +442,13 @@ function Details({ item, onDone, removeItem }) {
         </label>
       )}
 
-      <PackSize
-        grams={item.pack_grams}
-        onChange={async (g) => { await updateItem(item.id, { pack_grams: g }); flash(); }}
-        label="How big is one?"
-      />
+      {!isProduct && (
+        <PackSize
+          grams={item.pack_grams}
+          onChange={async (g) => { await updateItem(item.id, { pack_grams: g }); flash(); }}
+          label="How big is one?"
+        />
+      )}
 
       <div className="field-grid">
         <label className="stack-tight">
@@ -427,10 +465,9 @@ function Details({ item, onDone, removeItem }) {
         </label>
       </div>
 
-      <label className="stack-tight">
-        <span className="label muted">Use by</span>
-        <input type="date" value={form.expiry_date} onChange={set('expiry_date')} />
-      </label>
+      {/* Expiry dates are hidden for now — the data stays on the item
+          (`item.expiry_date`) untouched, there's just nothing here to edit
+          it with. */}
 
       <p className="label muted">
         Bought {item.added > 0 ? describe({ ...item, quantity: item.added }).main : 'an unknown amount'}

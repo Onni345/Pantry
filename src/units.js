@@ -27,7 +27,10 @@ export const DIMENSIONS = { WEIGHT: 'weight', COUNT: 'count' };
 export const NATURAL_UNITS = [
   'item', 'pack', 'container', 'bottle', 'can', 'jar', 'box', 'bag', 'carton', 'tub',
   'egg', 'slice', 'loaf', 'bunch', 'head', 'clove', 'stick', 'breast', 'fillet', 'steak',
-  'gallon', 'quart', 'pint', 'litre', 'cup'
+  'gallon', 'quart', 'pint', 'litre', 'cup',
+  // A recognised product's own nutrition-label serving — "3 servings", not
+  // "3 packs". See features/inventory/amounts.js `productAmount`.
+  'serving'
 ];
 
 /** Weight units someone might type. Exact factors, all to grams. */

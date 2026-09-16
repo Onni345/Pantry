@@ -465,3 +465,61 @@ export function defaultServing(food, unit = null) {
 }
 
 export { UNIT_GRAMS };
+
+/* ------------------------------------------------------------- products
+ *
+ * The core rule the add-flow follows: a recognised PRODUCT (something with a
+ * barcode, or a Branded/Open Food Facts record — a specific packet with a
+ * nutrition label) is always tracked as servings x macros-per-serving. A
+ * GENERIC food (a loose ingredient like "chicken breast" or "egg, raw" from
+ * USDA's Foundation/SR Legacy/Survey datasets, or nothing matched at all) is
+ * tracked by physical quantity instead — grams, count, whatever the kitchen
+ * actually measures it in.
+ *
+ * This distinction is what fixes the "whole package counted as one serving"
+ * bug: `servingsFor` deliberately includes the whole packet as one of its
+ * options (so a manual portion picker can offer "package (340 g)" alongside
+ * "1 slice"), and `defaultServing` falls back to the largest option when
+ * nothing else matches a chosen unit — which is very often the package. A
+ * product never goes through that picker at all; it reads `serving_grams`
+ * straight off the food record, which is the only number the nutrition label
+ * itself calls "one serving".
+ */
+
+/** Is this a specific packaged product — a barcode, a brand, a label? */
+export function isProductFood(food) {
+  if (!food) return false;
+  return food.source === 'off' || food.dataset === 'Branded' || Boolean(food.upc);
+}
+
+/**
+ * How a recognised product should be entered: always servings, when the
+ * product's own nutrition label says what a serving weighs. Falls back to
+ * plain weight — never to the package weight standing in for a serving —
+ * when no serving size is known at all.
+ *
+ * Returns { mode: 'servings' | 'weight', unit, grams_each, defaultQuantity }.
+ */
+export function productAmount(food) {
+  const servingGrams = Number(food?.serving_grams);
+  const packGrams = Number(food?.package_grams);
+
+  if (Number.isFinite(servingGrams) && servingGrams > 0) {
+    const defaultQuantity =
+      Number.isFinite(packGrams) && packGrams > 0
+        ? Math.max(1, Math.round(packGrams / servingGrams))
+        : 1;
+    return { mode: 'servings', unit: 'serving', grams_each: servingGrams, defaultQuantity };
+  }
+
+  // No serving size on file. Rather than guess — and guessing here is
+  // exactly how the package weight used to end up standing in for a
+  // serving — fall back to plain grams, which needs no per-unit weight at
+  // all: the macros are already published per 100 g.
+  return {
+    mode: 'weight',
+    unit: 'g',
+    grams_each: null,
+    defaultQuantity: Number.isFinite(packGrams) && packGrams > 0 ? packGrams : null
+  };
+}

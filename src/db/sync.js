@@ -92,6 +92,47 @@ const eventToRemote = (e) => ({
   undone_type: e.undone_type ?? null
 });
 
+// food_cache is reference data, not household data — keyed by food_db_id,
+// the same for every household that ever looks that food up — so there is
+// no household_id to carry and no household filter on the pull below.
+const foodToRemote = (f) => ({
+  food_db_id: f.food_db_id,
+  name: f.name,
+  brand: f.brand || '',
+  brand_owner: f.brand_owner || '',
+  upc: f.upc || '',
+  image: f.image ?? null,
+  package_text: f.package_text || '',
+  package_grams: f.package_grams ?? null,
+  serving_text: f.serving_text || '',
+  serving_grams: f.serving_grams ?? null,
+  servings: f.servings || [],
+  dataset: f.dataset || '',
+  macros_per_unit: f.macros_per_unit ?? null,
+  source: f.source || '',
+  detail: f.detail || '',
+  cached_at: f.cached_at
+});
+
+const foodToLocal = (r) => ({
+  food_db_id: r.food_db_id,
+  name: r.name,
+  brand: r.brand,
+  brand_owner: r.brand_owner,
+  upc: r.upc,
+  image: r.image,
+  package_text: r.package_text,
+  package_grams: r.package_grams,
+  serving_text: r.serving_text,
+  serving_grams: r.serving_grams,
+  servings: r.servings || [],
+  dataset: r.dataset,
+  macros_per_unit: r.macros_per_unit,
+  source: r.source,
+  detail: r.detail,
+  cached_at: r.cached_at
+});
+
 const eventToLocal = (r) => ({
   id: r.id,
   household_id: r.household_id,
@@ -118,11 +159,17 @@ async function push(householdId) {
   // reference it wherever possible.
   for (const row of queued) {
     const payload =
-      row.target_table === 'items' ? itemToRemote(row.payload) : eventToRemote(row.payload);
+      row.target_table === 'items' ? itemToRemote(row.payload)
+      : row.target_table === 'food_cache' ? foodToRemote(row.payload)
+      : eventToRemote(row.payload);
+
+    // food_cache is keyed by food_db_id, not the client-generated `id` every
+    // other synced row uses — it's a global cache, not a row someone created.
+    const conflictKey = row.target_table === 'food_cache' ? 'food_db_id' : 'id';
 
     const { error } = await supabase
       .from(row.target_table)
-      .upsert(payload, { onConflict: 'id' });
+      .upsert(payload, { onConflict: conflictKey });
 
     if (error) {
       failed++;
@@ -155,16 +202,34 @@ async function pullTable(table, householdId, since, toLocal) {
   return { rows: (data || []).map(toLocal), raw: data || [] };
 }
 
+/**
+ * Same shape as `pullTable`, but food_cache has no household_id — it's a
+ * shared cache of public reference data, so every device pulls every food
+ * anyone has ever looked up rather than just its own household's.
+ */
+async function pullFoodCache(since) {
+  const { data, error } = await supabase
+    .from('food_cache')
+    .select('*')
+    .gt('server_updated_at', since)
+    .order('server_updated_at', { ascending: true })
+    .limit(1000);
+
+  if (error) throw error;
+  return { rows: (data || []).map(foodToLocal), raw: data || [] };
+}
+
 async function pull(householdId) {
   const cursor = getCursor(householdId);
   const since = new Date(Math.max(0, Date.parse(cursor) - OVERLAP_MS)).toISOString();
 
-  const [items, events] = await Promise.all([
+  const [items, events, foods] = await Promise.all([
     pullTable('items', householdId, since, itemToLocal),
-    pullTable('events', householdId, since, eventToLocal)
+    pullTable('events', householdId, since, eventToLocal),
+    pullFoodCache(since)
   ]);
 
-  await db.transaction('rw', db.items, db.events, async (tx) => {
+  await db.transaction('rw', db.items, db.events, db.food_cache, async (tx) => {
     // Items: last write wins on updated_at. A remote row older than what this
     // device already has is a stale echo of a change we made — ignore it.
     for (const remote of items.rows) {
@@ -177,15 +242,25 @@ async function pull(householdId) {
     // Events are immutable, so there is nothing to reconcile: put by id and
     // duplicates collapse onto themselves.
     if (events.rows.length) await tx.table('events').bulkPut(events.rows);
+
+    // Foods: last write wins on cached_at, same reasoning as items — a
+    // device that just enriched a food (loadServings) shouldn't have that
+    // overwritten by an older remote echo of the same food_db_id.
+    for (const remote of foods.rows) {
+      const local = await tx.table('food_cache').get(remote.food_db_id);
+      if (!local || String(remote.cached_at) >= String(local.cached_at)) {
+        await tx.table('food_cache').put(remote);
+      }
+    }
   });
 
-  const stamps = [...items.raw, ...events.raw]
+  const stamps = [...items.raw, ...events.raw, ...foods.raw]
     .map((r) => r.server_updated_at)
     .filter(Boolean)
     .sort();
   if (stamps.length) setCursor(householdId, stamps[stamps.length - 1]);
 
-  return { items: items.rows.length, events: events.rows.length };
+  return { items: items.rows.length, events: events.rows.length, foods: foods.rows.length };
 }
 
 /* ------------------------------------------------------------------- entry */
