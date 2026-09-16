@@ -1,0 +1,73 @@
+# Build the PWA and publish it to GitHub Pages.
+#
+# Why a workflow rather than committing `dist/`: the built bundle bakes in the
+# Supabase URL and keys at build time, so it has to be built somewhere that
+# has them. Keeping them in repository secrets means they are never in the
+# git history, only in the deployed output.
+#
+# One honest caveat about that output: a client-side app cannot hide its keys.
+# Anyone can read the Supabase anon key out of the JavaScript — which is fine,
+# because that key is *designed* to be public and the row-level security
+# policies are what actually protect the data. The USDA key is not secret
+# either, but it is rate-limited per key, so a public site shares its quota
+# with anyone who looks.
+
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [master, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never two deploys at once; a queued one supersedes rather than races.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # The tests are pure and the SSR smoke render needs no browser, so both
+      # run here. A broken build should not reach a phone.
+      - run: npm test
+      - run: npm run smoke
+
+      - name: Build
+        env:
+          # https://<user>.github.io/<repo>/ — derived from the repository
+          # itself so renaming it does not silently break every asset URL.
+          VITE_BASE: /${{ github.event.repository.name }}/
+          VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_USDA_API_KEY: ${{ secrets.VITE_USDA_API_KEY }}
+        run: npm run build
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4
