@@ -29,3 +29,7 @@
   background: var(--surface);
 }
 .scanner-bar .label { text-align: right; }
+
+/* Brief, visible confirmation that the cooldown is intentional — a scanner
+   that just goes quiet for a second and a half reads as broken, not paused. */
+.scanner-bar.is-scanned .label { color: var(--accent); font-weight: 600; }

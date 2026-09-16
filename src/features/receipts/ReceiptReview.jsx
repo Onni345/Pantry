@@ -121,7 +121,7 @@ export default function ReceiptReview({
             />
           ) : (
             <>
-              <ItemCard row={row} onEdit={() => setEditing(true)} />
+              <ItemCard row={row} onEdit={() => setEditing(true)} onChange={(patch) => onChange(row.id, patch)} />
 
               {note && <p className="label muted review-note">{note}</p>}
 
@@ -192,8 +192,16 @@ export default function ReceiptReview({
   );
 }
 
-/** Price, shop, product, size, confidence, macros. In that order, by size. */
-export function ItemCard({ row, onEdit }) {
+/**
+ * Price, shop, product, quantity, confidence, macros. In that order, by size.
+ *
+ * Quantity is right on the card, editable, not buried behind Edit/Change --
+ * "how many servings do I actually have" is the one thing that's ALWAYS
+ * different from item to item even when the product match itself is right,
+ * so it shouldn't cost a second screen. Edit/Change stays for the cases that
+ * are actually rare: the match is wrong, or the name needs fixing.
+ */
+export function ItemCard({ row, onEdit, onChange }) {
   const level = confidenceOf(row);
   const food = row.matchedFood;
   const m = food?.macros_per_unit || {};
@@ -204,17 +212,12 @@ export function ItemCard({ row, onEdit }) {
       {row.price != null && <p className="card-price">${row.price.toFixed(2)}</p>}
 
       <p className="card-shop label">
-        {[row.retailer, food?.brand || row.brand].filter(Boolean).join(' · ') || ' '}
+        {[row.retailer, food?.brand || row.brand].filter(Boolean).join(' · ') || ' '}
       </p>
 
       <h3 className="card-name">{food?.name || row.name || row.rawName}</h3>
 
-      <p className="card-size label muted">
-        {[
-          `${formatQty(row.quantity)} ${qtyUnitLabel(row.unit, row.quantity)}`,
-          food?.package_text
-        ].filter(Boolean).join(' · ')}
-      </p>
+      <QuantityStepper row={row} onChange={onChange} />
 
       {food?.image && <img className="card-image" src={food.image} alt="" />}
 
@@ -229,21 +232,68 @@ export function ItemCard({ row, onEdit }) {
         </dl>
       )}
 
-      {/* The product's own nutrition-label serving — never the package
+      {/* The product's own nutrition-label serving -- never the package
           weight standing in for it. */}
       {amount?.mode === 'servings' && (
         <p className="label muted card-grams">
-          One serving = {roundGrams(amount.grams_each)} g
+          {[`One serving = ${roundGrams(amount.grams_each)} g`, food?.package_text]
+            .filter(Boolean).join(' · ')}
         </p>
       )}
       {amount?.mode === 'weight' && (
         <p className="label muted card-grams">
-          No serving size on file — tracked by weight instead.
+          No serving size on file -- tracked by weight instead.
         </p>
       )}
 
       <button className={`card-edit${level === 'low' ? ' primary' : ''}`} onClick={onEdit}>
         {level === 'low' ? 'Find product' : 'Edit / Change item'}
+      </button>
+    </div>
+  );
+}
+
+/**
+ * The one number that's always worth a direct edit: how many of this you
+ * actually have. -/+ for the common one-at-a-time nudge, a typed field for
+ * anything else. `onChange` is optional so this same card still renders
+ * read-only in places (like the summary list) that don't pass one.
+ */
+function QuantityStepper({ row, onChange }) {
+  const isWeight = row.unit === 'g' || row.unit === 'kg' || row.unit === 'oz' || row.unit === 'lb';
+  const step = isWeight ? 10 : 1;
+  const noun = qtyUnitLabel(row.unit, row.quantity);
+
+  if (!onChange) {
+    return <p className="card-size label muted">{formatQty(row.quantity)} {noun}</p>;
+  }
+
+  const set = (q) => onChange({ quantity: Math.max(0, round3(q)) });
+
+  return (
+    <div className="card-stepper" role="group" aria-label="Quantity">
+      <button
+        type="button" className="stepper-btn"
+        onClick={() => set(row.quantity - step)}
+        disabled={row.quantity <= 0}
+        aria-label={`One fewer ${noun}`}
+      >
+        −
+      </button>
+      <label className="stepper-value">
+        <input
+          type="number" inputMode="decimal" min="0" step="any"
+          value={formatQty(row.quantity)}
+          onChange={(e) => set(Number(e.target.value))}
+        />
+        <span className="label muted">{noun}</span>
+      </label>
+      <button
+        type="button" className="stepper-btn"
+        onClick={() => set(row.quantity + step)}
+        aria-label={`One more ${noun}`}
+      >
+        +
       </button>
     </div>
   );
@@ -409,6 +459,7 @@ const qtyUnitLabel = (unit, quantity) => {
 };
 
 const round1 = (n) => Math.round(n * 10) / 10;
+const round3 = (n) => Math.round(n * 1000) / 1000;
 /* A package weight printed to the centigram reads like a lab result. Nobody
    needs 2267.96 g of rice; they need to know it's about five pounds. */
 const roundGrams = (n) => (n >= 100 ? Math.round(n) : Math.round(n * 10) / 10);

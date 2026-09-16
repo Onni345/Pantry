@@ -21,7 +21,16 @@ export default function Scanner({ onCode, onClose, hint = 'Point at the barcode'
   const videoRef = useRef(null);
   const [error, setError] = useState('');
   const [ready, setReady] = useState(false);
-  const lastRef = useRef({ code: '', at: 0 });
+  const [justScanned, setJustScanned] = useState(false);
+  // A single cooldown gate, not a per-code one. A barcode held in frame for
+  // more than an instant is read several times a second, and it is not
+  // always read identically each time — a slight misread produces a
+  // DIFFERENT code string, which the old per-code de-dup let straight
+  // through. That's the reported bug: one swipe of one item produced two or
+  // three rows. Locking out ALL codes for a beat after any accepted one
+  // means exactly one item per swipe, whatever the detector thinks it saw
+  // in between.
+  const lockUntilRef = useRef(0);
 
   useEffect(() => {
     let stream = null;
@@ -77,10 +86,10 @@ export default function Scanner({ onCode, onClose, hint = 'Point at the barcode'
         try {
           const found = await detector.detect(video);
           const code = found?.[0]?.rawValue?.replace(/\D/g, '');
-          if (code && accept(code)) {
-            // A camera reads the same barcode many times a second. One hit,
-            // then a pause, so scanning three things in a row doesn't add the
-            // first one thirty times.
+          if (code && accept()) {
+            lockUntilRef.current = Date.now() + SCAN_COOLDOWN_MS;
+            setJustScanned(true);
+            setTimeout(() => setJustScanned(false), SCAN_COOLDOWN_MS);
             onCode(code);
           }
         } catch { /* a frame that won't decode is not an error */ }
@@ -88,12 +97,9 @@ export default function Scanner({ onCode, onClose, hint = 'Point at the barcode'
       raf = requestAnimationFrame(tick);
     }
 
-    function accept(code) {
-      const now = Date.now();
-      const last = lastRef.current;
-      if (code === last.code && now - last.at < 2500) return false;
-      lastRef.current = { code, at: now };
-      return true;
+    /** One accepted code at a time — see the note on `lockUntilRef` above. */
+    function accept() {
+      return Date.now() >= lockUntilRef.current;
     }
 
     start();
@@ -109,9 +115,11 @@ export default function Scanner({ onCode, onClose, hint = 'Point at the barcode'
       <video ref={videoRef} className="scanner-video" playsInline muted />
       <div className="scanner-frame" aria-hidden="true" />
 
-      <div className="scanner-bar">
+      <div className={`scanner-bar${justScanned ? ' is-scanned' : ''}`}>
         <button className="link-button" onClick={onClose}>Close</button>
-        <span className="label">{error || (ready ? hint : 'Starting the camera…')}</span>
+        <span className="label">
+          {error || (justScanned ? 'Scanned ✓ — hold for the next item' : ready ? hint : 'Starting the camera…')}
+        </span>
       </div>
     </div>
   );
@@ -119,6 +127,14 @@ export default function Scanner({ onCode, onClose, hint = 'Point at the barcode'
 
 /** The formats groceries actually carry. Narrower means faster decoding. */
 const FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'itf'];
+
+/**
+ * How long detection is fully paused after one accepted code, before the
+ * next one can be. Long enough that the same swipe of the same barcode can't
+ * register a second, subtly-misread code; short enough that scanning a
+ * whole cart doesn't feel like it's fighting you.
+ */
+const SCAN_COOLDOWN_MS = 1500;
 
 /**
  * Camera failures are almost always permission or context, and both have a

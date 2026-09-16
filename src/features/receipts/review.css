@@ -120,6 +120,45 @@
 
 .card-size { font-size: 15px; }
 
+/* The quantity control: a big enough target to nudge with a thumb, a typed
+   field for anything other than +/-1, right on the card so the common edit
+   never has to leave it. */
+.card-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+}
+.stepper-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  font-size: 20px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+.stepper-value {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+  min-width: 4.5rem;
+}
+.stepper-value input {
+  width: 100%;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+.stepper-value input:focus { outline: 2px solid var(--accent); border-radius: var(--radius); }
+
 .card-image {
   width: 96px;
   height: 96px;
