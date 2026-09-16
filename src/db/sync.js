@@ -316,6 +316,45 @@ export function pendingCount() {
 }
 
 /**
+ * Self-heal: fetch any food_cache row an item points at but this device
+ * doesn't have locally yet — directly, by id, rather than waiting for the
+ * periodic cursor-based pull to eventually catch up.
+ *
+ * The bulk sync above is the normal path and is usually enough. But it is
+ * paced by a cursor and a poll interval, and a device that was asleep, or
+ * that pulled a moment before a push from another device landed, can be
+ * left pointing at a food_db_id with nothing behind it for a while. That is
+ * the visible symptom the user keeps reporting: the item and its quantity
+ * sync fine (those go through the same items/events path either way), but
+ * the specific nutrition data lags or never arrives. This is what actually
+ * guarantees "the same item shows identical nutrition on every device the
+ * moment you open it" rather than "eventually, once a sync cycle happens to
+ * pick it up" — it is called every time the item list is (re)loaded.
+ */
+export async function healMissingFoodCache(items) {
+  if (!isConfigured) return 0;
+  const ids = [...new Set((items || []).map((i) => i.food_db_id).filter(Boolean))];
+  if (!ids.length) return 0;
+
+  const cached = await db.food_cache.where('food_db_id').anyOf(ids).toArray();
+  const have = new Set(cached.map((f) => f.food_db_id));
+  const missing = ids.filter((id) => !have.has(id));
+  if (!missing.length) return 0;
+
+  try {
+    const { data, error } = await supabase.from('food_cache').select('*').in('food_db_id', missing);
+    if (error || !data?.length) return 0;
+    await db.food_cache.bulkPut(data.map(foodToLocal));
+    return data.length;
+  } catch (e) {
+    // Best-effort — the normal sync cycle will pick it up eventually, and a
+    // network hiccup here shouldn't be treated as a failure worth surfacing.
+    console.warn('sync: food_cache heal failed', e.message);
+    return 0;
+  }
+}
+
+/**
  * Runs a cycle now, whenever the device comes back online, when the tab is
  * refocused, and on a slow poll as a backstop. Returns an unsubscribe.
  */
