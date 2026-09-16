@@ -1,15 +1,12 @@
 import { useEffect, useState } from 'react';
 import { useInventory } from '../../context/InventoryContext.jsx';
 import { lookupFood } from '../../api/foodLookup.js';
-import { foodUnitGrams, defaultServing, servingsFor, isProductFood, productAmount } from './amounts.js';
+import { defaultServing, servingsFor, isProductFood, productAmount } from './amounts.js';
 import { loadServings } from '../../api/foodLookup.js';
 import FoodSearchSheet from '../../components/FoodSearchSheet.jsx';
-import ServingPicker from '../../components/ServingPicker.jsx';
-import PackSize from '../../components/PackSize.jsx';
-import '../../components/PackSize.css';
 import { isPluCode, pluQuery } from '../../api/plu.js';
 import { recentNames } from '../../db/queries.js';
-import { NATURAL_UNITS, WEIGHT_UNIT_NAMES } from '../../units.js';
+import { NATURAL_UNITS, WEIGHT_UNIT_NAMES, WEIGHT_UNITS } from '../../units.js';
 import { LOCATIONS } from '../../db/schema.js';
 import { guessCategory } from './categoryGuess.js';
 import './addmenu.css';
@@ -84,21 +81,33 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
   const { addItem } = useInventory();
   const [name, setName] = useState(initial.name || '');
   const [quantity, setQuantity] = useState('1');
-  const [unit, setUnit] = useState(initial.unit || 'item');
+  const [unit] = useState(initial.unit || 'item');
   const [location, setLocation] = useState(initial.location || 'fridge');
   const [food, setFood] = useState(initial.food || null);
-  const [serving, setServing] = useState(null);
-  const [packGrams, setPackGrams] = useState(null);
   const [searching, setSearching] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // Servings vs. gross weight, for a generic (non-product) food. A recognised
+  // product skips this entirely -- it's always servings, below.
+  const [qtyMode, setQtyMode] = useState('servings');
+  const [serving, setServing] = useState(null);
+  // The dropdown's own selection -- a named portion's label, or 'custom'. Kept
+  // separate from `serving` because 'custom' has no portion object behind it.
+  const [servingChoice, setServingChoice] = useState('custom');
+  const [customAmount, setCustomAmount] = useState('');
+  const [customUnit, setCustomUnit] = useState('g');
+  const [weightUnit, setWeightUnit] = useState('g');
+
   const isProduct = isProductFood(food);
-  // Generic-food picker (eggs, butter, bread, cheese -- staples with
-  // standardised named sizes). Products never use this: they go straight to
-  // servings, below.
-  const usePicker = !isProduct && servingsFor(food).length > 0;
-  const per = foodUnitGrams(food, unit);
+  const sizes = servingsFor(food);
   const product = isProduct ? productAmount(food) : null;
+
+  useEffect(() => {
+    if (isProduct) return;
+    const def = defaultServing(food, unit);
+    setServing(def);
+    setServingChoice(def ? def.label : 'custom');
+  }, [food, isProduct]);
 
   useEffect(() => {
     if (!isProduct) return;
@@ -122,7 +131,21 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
           grams_each: product.grams_each,
           pack_grams: null
         });
+      } else if (qtyMode === 'weight') {
+        await addItem({
+          name: name.trim(),
+          quantity: Number(quantity) || 1,
+          location,
+          category: guessCategory(name) || 'other',
+          unit: weightUnit,
+          food_db_id: food?.food_db_id || initial.food_db_id || null,
+          grams_each: null,
+          pack_grams: null
+        });
       } else {
+        const customGrams = Number(customAmount) > 0
+          ? Number(customAmount) * WEIGHT_UNITS[customUnit]
+          : null;
         await addItem({
           name: name.trim(),
           quantity: Number(quantity) || 1,
@@ -130,10 +153,10 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
           category: guessCategory(name) || 'other',
           // "3 large eggs" stores unit 'egg' and 50 g each, so the list says
           // "3 eggs" and the macros still work out.
-          unit: usePicker && serving ? servingUnit(serving, unit) : unit,
+          unit: servingChoice === 'custom' ? unit : servingUnit(serving, unit),
           food_db_id: food?.food_db_id || initial.food_db_id || null,
-          grams_each: serving?.grams ?? per.grams,
-          pack_grams: packGrams
+          grams_each: servingChoice === 'custom' ? customGrams : (serving?.grams ?? null),
+          pack_grams: null
         });
       }
       onDone();
@@ -210,60 +233,101 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
               </select>
             </label>
           </div>
-        ) : usePicker ? (
-          <div className="add-qty is-picker">
-            <ServingPicker
-              food={food}
-              quantity={quantity}
-              serving={serving}
-              onQuantity={setQuantity}
-              onServing={setServing}
-            />
-            <label className="stack-tight">
-              <span className="label muted">Where</span>
-              <select value={location} onChange={(e) => setLocation(e.target.value)}>
-                {LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
-              </select>
-            </label>
-          </div>
         ) : (
-        <div className="add-qty">
-          <label className="stack-tight">
-            <span className="label muted">How many</span>
-            <input
-              type="number" inputMode="decimal" min="0" step="any"
-              value={quantity} onChange={(e) => setQuantity(e.target.value)}
-            />
-          </label>
-          <label className="stack-tight">
-            <span className="label muted">Of what</span>
-            <select value={unit} onChange={(e) => setUnit(e.target.value)}>
-              <optgroup label="Things you count">
-                {['item', ...NATURAL_UNITS.filter((u) => u !== 'item' && u !== 'serving')].map((u) => (
-                  <option key={u} value={u}>{u}</option>
-                ))}
-              </optgroup>
-              <optgroup label="By weight">
-                {WEIGHT_UNIT_NAMES.map((u) => (
-                  <option key={u} value={u}>{u}</option>
-                ))}
-              </optgroup>
-            </select>
-          </label>
-          <label className="stack-tight">
-            <span className="label muted">Where</span>
-            <select value={location} onChange={(e) => setLocation(e.target.value)}>
-              {LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
-            </select>
-          </label>
-        </div>
-        )}
+          <div className="add-qty-block">
+            {/* Servings vs. gross weight -- pick the shape of the question
+                before answering it, rather than asking both at once. */}
+            <div className="qty-toggle" role="tablist" aria-label="How to enter the amount">
+              <button
+                type="button" role="tab" aria-selected={qtyMode === 'servings'}
+                className={qtyMode === 'servings' ? 'is-active' : ''}
+                onClick={() => setQtyMode('servings')}
+              >
+                Servings
+              </button>
+              <button
+                type="button" role="tab" aria-selected={qtyMode === 'weight'}
+                className={qtyMode === 'weight' ? 'is-active' : ''}
+                onClick={() => setQtyMode('weight')}
+              >
+                Gross weight
+              </button>
+            </div>
 
-        {/* Pack size is only meaningful for a generic food someone is
-            manually bridging to a weight -- a recognised product already
-            knows its own serving size and never needs this asked. */}
-        {!isProduct && (
-          <PackSize grams={packGrams} onChange={setPackGrams} label="How big is one?" />
+            {qtyMode === 'servings' ? (
+              <>
+                <div className="add-qty">
+                  <label className="stack-tight">
+                    <span className="label muted">How many</span>
+                    <input
+                      type="number" inputMode="decimal" min="0" step="any"
+                      value={quantity} onChange={(e) => setQuantity(e.target.value)}
+                    />
+                  </label>
+                  <label className="stack-tight">
+                    <span className="label muted">Serving size</span>
+                    <select
+                      value={servingChoice}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setServingChoice(val);
+                        setServing(val === 'custom' ? null : sizes.find((s) => s.label === val) || null);
+                      }}
+                    >
+                      {sizes.map((s) => (
+                        <option key={s.label} value={s.label}>{s.label} — {fmtGrams(s.grams)}g</option>
+                      ))}
+                      <option value="custom">Custom serving size</option>
+                    </select>
+                  </label>
+                  <label className="stack-tight">
+                    <span className="label muted">Where</span>
+                    <select value={location} onChange={(e) => setLocation(e.target.value)}>
+                      {LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
+                    </select>
+                  </label>
+                </div>
+
+                {/* Only shown once someone actually needs it -- this is what
+                    replaced the separate "how big is one, optional" field. */}
+                {servingChoice === 'custom' && (
+                  <div className="row custom-serving">
+                    <span className="label muted">Custom serving size</span>
+                    <input
+                      type="number" inputMode="decimal" min="0" step="any"
+                      value={customAmount} onChange={(e) => setCustomAmount(e.target.value)}
+                      placeholder="optional"
+                    />
+                    <select value={customUnit} onChange={(e) => setCustomUnit(e.target.value)}>
+                      {WEIGHT_UNIT_NAMES.map((u) => <option key={u} value={u}>{u}</option>)}
+                    </select>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="add-qty">
+                <label className="stack-tight">
+                  <span className="label muted">How much</span>
+                  <input
+                    type="number" inputMode="decimal" min="0" step="any"
+                    value={quantity} onChange={(e) => setQuantity(e.target.value)}
+                  />
+                </label>
+                <label className="stack-tight">
+                  <span className="label muted">Unit</span>
+                  <select value={weightUnit} onChange={(e) => setWeightUnit(e.target.value)}>
+                    {WEIGHT_UNIT_NAMES.map((u) => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </label>
+                <label className="stack-tight">
+                  <span className="label muted">Where</span>
+                  <select value={location} onChange={(e) => setLocation(e.target.value)}>
+                    {LOCATIONS.map((l) => <option key={l} value={l}>{l}</option>)}
+                  </select>
+                </label>
+              </div>
+            )}
+          </div>
         )}
 
         <button className="primary" type="submit" disabled={busy || !name.trim()}>
@@ -275,13 +339,6 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
         {isProduct && product.mode === 'weight' && (
           <p className="label muted">
             No serving size on file for this product -- enter the total weight instead.
-          </p>
-        )}
-        {!isProduct && !usePicker && (
-          <p className="label muted">
-            {per.grams != null
-              ? `${per.exact ? 'One' : 'About one'} ${unit} = ${per.grams} g${per.basis === 'table' ? ' (estimated)' : ''}.`
-              : 'No weight needed. Nutrition can come later, or never.'}
           </p>
         )}
       </form>
@@ -390,6 +447,12 @@ function servingUnit(serving, fallback) {
   if (known) return known;
   if (/package|packet/.test(label)) return 'pack';
   return fallback;
+}
+
+/** "40g", not "40.333333g" -- a serving-size dropdown is a label, not a receipt. */
+function fmtGrams(n) {
+  const v = Number(n) || 0;
+  return v >= 100 ? String(Math.round(v)) : String(Math.round(v * 10) / 10);
 }
 
 function Panel({ title, onBack, onClose, children }) {

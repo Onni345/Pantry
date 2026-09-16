@@ -18,15 +18,43 @@
 }
 .add-qty select { text-transform: capitalize; }
 
-/* The picker already carries its own count field, so it replaces two of the
-   three columns rather than squeezing into one of them. Below ~26rem the
-   location select drops to its own row instead of crushing the portion name,
-   which is the longest string in the control. */
-.add-qty.is-picker { grid-template-columns: 1fr; }
-.add-qty.is-picker > label { align-self: end; }
-@media (min-width: 26rem) {
-  .add-qty.is-picker { grid-template-columns: 1fr 8rem; }
+/* Below ~26rem, three columns of controls crush each other -- quantity and
+   serving size stay on one row and "Where" drops to its own. */
+@media (max-width: 26rem) {
+  .add-qty { grid-template-columns: 5rem 1fr; }
+  .add-qty:has(> :nth-child(3)) > :nth-child(3) { grid-column: 1 / -1; }
 }
+
+.add-qty-block { display: flex; flex-direction: column; gap: var(--space-2); }
+
+/* Servings vs. gross weight: a thin two-way switch, not two more form
+   fields -- picking the shape of the question is not itself a question. */
+.qty-toggle {
+  display: flex;
+  height: 2.25rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.qty-toggle button {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
+}
+.qty-toggle button.is-active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Only rendered when "Custom serving size" is actually picked -- otherwise
+   this is exactly the clutter it replaced. */
+.custom-serving { align-items: center; gap: var(--space-2); }
+.custom-serving input { flex: 1; min-width: 0; }
+.custom-serving select { flex: none; width: auto; text-transform: lowercase; }
 
 .recent-list { display: flex; flex-direction: column; gap: var(--space-1); max-height: 50vh; overflow-y: auto; }
 .recent-item {
