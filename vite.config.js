@@ -3,8 +3,16 @@ import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 
 export default defineConfig({
-  // Set this to '/<repo-name>/' if deploying to GitHub Pages under a subpath.
-  base: '/',
+  /*
+   * GitHub Pages serves a project site from a subpath —
+   * https://<user>.github.io/<repo>/ — and every asset URL has to carry it or
+   * the page loads and then 404s on its own JavaScript.
+   *
+   * It is read from the environment rather than hardcoded so the repo can be
+   * renamed without editing this file, and so `npm run dev` stays at "/"
+   * where it belongs. The Pages workflow derives it from GITHUB_REPOSITORY.
+   */
+  base: process.env.VITE_BASE || '/',
   plugins: [
     react(),
     VitePWA({
@@ -17,7 +25,11 @@ export default defineConfig({
         theme_color: '#1f1f1f',
         background_color: '#ffffff',
         display: 'standalone',
+        // Relative, so it resolves against wherever the app is served from —
+        // the root in development, /<repo>/ on Pages — without this file
+        // needing to know which.
         start_url: '.',
+        scope: './',
         icons: [
           { src: 'icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: 'icon-512.png', sizes: '512x512', type: 'image/png' },

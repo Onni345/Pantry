@@ -1,5 +1,19 @@
+# Headers for a host that reads this file — Netlify and Cloudflare Pages do.
+# GITHUB PAGES DOES NOT: it serves static files with its own fixed headers and
+# ignores this entirely, so nothing below applies there. Kept because the
+# policy is right and the moment this moves to a host that honours it, the
+# defaults would otherwise be wrong in ways that are hard to notice.
+#
+# camera=(self) rather than camera=(): this said camera=() — the syntax for
+# "no origin may use the camera" — which silently disabled barcode scanning
+# outright, with getUserMedia rejecting and no obvious reason why.
+#
+# 'wasm-unsafe-eval' is required by Chrome to compile WebAssembly under a CSP,
+# and both the barcode decoder and Tesseract are WASM. The CDN entries are for
+# Tesseract, which fetches its worker, core and language data at runtime (see
+# features/receipts/ocr.js) — remove them if that is ever bundled locally.
 /*
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://*.supabase.co https://api.nal.usda.gov https://world.openfoodfacts.org https://generativelanguage.googleapis.com; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'wasm-unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' blob: https://cdn.jsdelivr.net https://unpkg.com https://*.supabase.co https://api.nal.usda.gov https://world.openfoodfacts.org https://generativelanguage.googleapis.com; frame-ancestors 'none'; base-uri 'none'; form-action 'none'; object-src 'none'
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
-  Permissions-Policy: geolocation=(), camera=(), microphone=()
+  Permissions-Policy: geolocation=(), camera=(self), microphone=()

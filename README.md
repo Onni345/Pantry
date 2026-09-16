@@ -4,6 +4,30 @@ A household food inventory PWA. See `Spec` (in the project) for the full design.
 This file is the day-to-day cheat sheet: running it, testing it, and deleting data
 while you're playing around.
 
+## Hosting it on GitHub Pages
+
+`.github/workflows/pages.yml` builds and publishes on every push to `master`.
+Three one-time steps:
+
+1. **Settings → Pages → Source: GitHub Actions.**
+2. **Settings → Secrets and variables → Actions**, add `VITE_SUPABASE_URL`,
+   `VITE_SUPABASE_ANON_KEY` and `VITE_USDA_API_KEY`. They are baked into the
+   bundle at build time, so they have to be available to the build; keeping
+   them here means they never enter the git history.
+3. **Supabase → Authentication → URL Configuration → Redirect URLs**, add
+   `https://<user>.github.io/<repo>/`. Without it the magic link bounces to
+   localhost and sign-in fails with no useful error.
+
+The base path is derived from the repository name by the workflow, so renaming
+the repo does not break every asset URL.
+
+A client-side app cannot hide its keys, and Pages on the free tier means a
+public repo. The Supabase anon key is *designed* to be public — the row-level
+security policies are what protect the data, which is why the allowlist lives
+in the database and not in the app. The USDA key is not secret either, but it
+is rate-limited per key, so a public site shares its quota with anyone who
+reads the bundle.
+
 ## Running it locally
 
 ```bash
