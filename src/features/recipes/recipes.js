@@ -1,3 +1,5 @@
+import { describe, stockGrams } from '../inventory/amounts.js';
+
 /**
  * Recipe suggestions: prompt building and response validation.
  *
@@ -6,9 +8,16 @@
  * whether to trust what comes back.
  */
 
-/** Only weighed items with something left can go into a recipe. */
+/**
+ * Anything you still have can go into a recipe.
+ *
+ * This used to insist on `base_unit === 'g'`, from back when every item was
+ * weighed. Once food started being counted in its own nouns — eggs, packs,
+ * jars — that filter quietly excluded most of a real kitchen, and a fridge
+ * full of food reported itself as empty.
+ */
 export function eligibleItems(items) {
-  return items.filter((i) => i.base_unit === 'g' && i.quantity > 0);
+  return items.filter((i) => Number(i.quantity) > 0);
 }
 
 const RESPONSE_SCHEMA = {
@@ -42,18 +51,28 @@ const RESPONSE_SCHEMA = {
 };
 
 export function buildPrompt(items) {
-  const stock = items.map((i) => `- ${i.name}: ${Math.round(i.quantity)} g (${i.location})`).join('\n');
+  // Described the way the kitchen actually reads. Printing "12 g" for a
+  // dozen eggs — which is what a bare `${quantity} g` did — is not a
+  // rounding error, it is a different food.
+  const stock = items
+    .map((i) => {
+      const { main, aside } = describe(i);
+      const weight = aside && /g$|kg$/.test(aside) ? ` (${aside})` : '';
+      return `- ${i.name}: ${main}${weight} [${i.location}]`;
+    })
+    .join('\n');
 
   return {
     schema: RESPONSE_SCHEMA,
     prompt: `Suggest up to 5 recipes using mainly what is in stock below. Prefer recipes
 that use more of the stock, and that use items closer to running out.
 
-Stock (grams currently on hand):
+Stock currently on hand:
 ${stock}
 
 For each recipe: which stocked items it uses and roughly how many grams of
-each (do not exceed what is in stock), a short list of common pantry staples
+each — where a weight is given in brackets, do not exceed it — a short list
+of common pantry staples
 it also needs that are NOT in the stock list above (salt, oil, water, and
 similar — keep this short), and brief instructions as plain text.
 
@@ -102,9 +121,12 @@ export function parseRecipes(raw, items) {
       // something with nothing left in stock is not grounded in anything
       // real, whatever number the model attached to it.
       if (!item || !Number.isFinite(grams) || grams <= 0 || item.quantity <= 0) continue;
-      // The model is not trusted to respect the stock it was given — clamp
-      // rather than reject, since "use all of it" is still a valid recipe.
-      uses.push({ item: item.name, grams: Math.min(grams, item.quantity), stocked: item.quantity });
+      // Clamp against what the item actually WEIGHS, not its quantity — for
+      // a counted item those are different numbers, and clamping 200 g of
+      // chicken against "2 breasts" would cap it at 2.
+      const have = stockGrams(item);
+      const used = have ? Math.min(grams, have) : grams;
+      uses.push({ item: item.name, grams: Math.round(used), stocked: have });
     }
     if (uses.length === 0) continue; // not grounded in anything real — drop it
 

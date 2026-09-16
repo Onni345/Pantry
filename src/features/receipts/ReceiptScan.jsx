@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { useInventory } from '../../context/InventoryContext.jsx';
 import { lookupFood, PREFER } from '../../api/foodLookup.js';
 import { hasApiKey, matchReceiptLines } from '../../api/llm.js';
-import { gramsPerUnit } from '../../api/portion.js';
+import { foodUnitGrams } from '../inventory/amounts.js';
 import { recognizeReceiptText } from './ocr.js';
 import { chunk } from './matching.js';
 import { extractCandidateLines, toRows, acceptFoodMatch, includedRows } from './receipts.js';
@@ -134,7 +134,7 @@ export default function ReceiptScan({ onClose }) {
         // The number that makes macros possible. Without it a counted item
         // contributes nothing at all, however carefully it was logged. A
         // portion the person picked by name wins over anything worked out.
-        const grams = row.serving?.grams ?? gramsPerUnit(food, row.unit).grams;
+        const grams = row.serving?.grams ?? foodUnitGrams(food, row.unit).grams;
         await addItem({
           name: row.name.trim(),
           quantity: row.quantity,

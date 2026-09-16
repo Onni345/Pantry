@@ -69,13 +69,11 @@ check('household picker — not on any list', () =>
     households: [], email: 'a@b.com', onPick() {}
   })));
 
-for (const lens of ['group', 'macro', 'expiry']) {
-  check(`group rows — ${lens} lens`, () =>
-    renderToString(React.createElement(CategoryRows, {
-      buckets: bucketize(stock.filter((i) => i.location === 'fridge'), lens),
-      lens, onLensChange() {}, onPick() {}
-    })));
-}
+check('group rows', () =>
+  renderToString(React.createElement(CategoryRows, {
+    buckets: bucketize(stock.filter((i) => i.location === 'fridge')),
+    onPick() {}
+  })));
 
 check('food row — weighed', () => renderToString(React.createElement(ItemRow, { item: weightItem, onOpen() {} })));
 check('food row — counted', () => renderToString(React.createElement(ItemRow, { item: countItem, onOpen() {} })));

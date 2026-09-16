@@ -1,12 +1,11 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useInventory } from '../../context/InventoryContext.jsx';
 import { getMacroInputs } from '../../db/queries.js';
-import { summarize, RANGES } from './macros.js';
+import { summarize } from './macros.js';
 import './macros.css';
 
 export default function MacrosSummary() {
   const { householdId, items } = useInventory();
-  const [range, setRange] = useState('today');
   const [inputs, setInputs] = useState(null);
 
   // `items` changes on every write, which is the cheapest signal that the log
@@ -17,28 +16,15 @@ export default function MacrosSummary() {
     return () => { live = false; };
   }, [householdId, items]);
 
-  const days = RANGES.find((r) => r.key === range)?.days ?? 1;
-  const summary = useMemo(() => (inputs ? summarize(inputs, { days }) : null), [inputs, days]);
+  const summary = useMemo(() => (inputs ? summarize(inputs) : null), [inputs]);
 
   if (!summary) return <p className="muted">Loading…</p>;
 
-  const { totals, perDay, coverage, topItems } = summary;
+  const { totals, coverage } = summary;
   const ate = coverage.gramsCounted > 0 || coverage.gramsUnmatched > 0 || coverage.countedUnits > 0;
 
   return (
     <div className="stack macros">
-      <div className="controls-row">
-        {RANGES.map((r) => (
-          <button
-            key={r.key}
-            className={range === r.key ? 'primary' : ''}
-            onClick={() => setRange(r.key)}
-          >
-            {r.label}
-          </button>
-        ))}
-      </div>
-
       {!ate ? (
         <div className="card empty">
           <p className="muted">
@@ -55,30 +41,8 @@ export default function MacrosSummary() {
             <Stat label="Fat" value={totals.fat_g} unit="g" />
           </div>
 
-          {perDay && (
-            <p className="label muted">
-              Per day: {perDay.calories} kcal · {perDay.protein_g}g protein ·{' '}
-              {perDay.carbs_g}g carbs · {perDay.fat_g}g fat
-            </p>
-          )}
-
           <Coverage coverage={coverage} />
 
-          {topItems.length > 0 && (
-            <div className="card stack-tight">
-              <p className="label muted">Biggest contributors</p>
-              <ul className="macro-list">
-                {topItems.map((i) => (
-                  <li key={i.id}>
-                    <span className="macro-item-name">{i.name}</span>
-                    <span className="label muted">
-                      {i.grams}g · {i.calories} kcal · {i.protein_g}g protein
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
         </>
       )}
     </div>

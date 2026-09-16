@@ -8,7 +8,6 @@ db.version(1).stores({
   items: 'id, household_id, name, category, location, updated_at, deleted',
   events: 'id, household_id, item_id, timestamp',
   food_cache: 'food_db_id, name',
-  expiry_cache: 'food_name_or_category',
   pending_sync: 'local_id, target_table, created_at'
 });
 
@@ -23,8 +22,7 @@ db.version(2)
     items: 'id, household_id, name, category, location, base_unit, updated_at, deleted',
     events: 'id, household_id, item_id, timestamp',
     food_cache: 'food_db_id, name',
-    expiry_cache: 'food_name_or_category',
-    pending_sync: 'local_id, target_table, created_at'
+      pending_sync: 'local_id, target_table, created_at'
   })
   .upgrade(async (tx) => {
     await tx.table('items').clear();
@@ -41,8 +39,7 @@ db.version(3)
     items: 'id, household_id, name, category, location, base_unit, updated_at, deleted',
     events: 'id, household_id, item_id, timestamp',
     food_cache: 'food_db_id, name',
-    expiry_cache: 'food_name_or_category',
-    pending_sync: 'local_id, target_table, created_at'
+      pending_sync: 'local_id, target_table, created_at'
   })
   .upgrade(async (tx) => {
     await tx.table('items').clear();

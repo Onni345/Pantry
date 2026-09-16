@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useInventory } from '../../context/InventoryContext.jsx';
 import { getCachedFood } from '../../api/foodLookup.js';
-import { gramsPerUnit, servingsFor, defaultServing } from '../../api/portion.js';
+import { foodUnitGrams, servingsFor, defaultServing } from './amounts.js';
 import { loadServings } from '../../api/foodLookup.js';
 import ServingPicker from '../../components/ServingPicker.jsx';
 import PackSize from '../../components/PackSize.jsx';
@@ -26,6 +26,7 @@ export default function ItemSheet({ item, onClose }) {
   const [busy, setBusy] = useState(false);
   const [details, setDetails] = useState(false);
   const [undoable, setUndoable] = useState(false);
+  const [error, setError] = useState('');
   const [food, setFood] = useState(null);
 
   const counted = item.base_unit !== 'g';
@@ -54,9 +55,15 @@ export default function ItemSheet({ item, onClose }) {
   async function run(fn, { undo = true } = {}) {
     if (busy) return;
     setBusy(true);
+    setError('');
     try {
       await fn();
       setUndoable(undo);
+    } catch (e) {
+      // This used to be try/finally with no catch. Every failure vanished, so
+      // a button that threw looked exactly like a button that did nothing —
+      // which is how a broken decrement went unnoticed.
+      setError(e.message || String(e));
     } finally {
       setBusy(false);
     }
@@ -83,13 +90,15 @@ export default function ItemSheet({ item, onClose }) {
 
         <Nutrition item={item} onFix={() => setDetails(true)} />
 
+        {error && <p className="error label">{error}</p>}
+
         <Take
           item={item}
           food={food}
           busy={busy}
           onTakeGrams={(g) => run(() => logAmount(item.id, { grams: g, direction: 'remove' }))}
-          onTakeUnits={(n) => run(() => logAmount(item.id, { value: n, unit: 'count', direction: 'remove' }))}
-          onAddUnits={(n) => run(() => logAmount(item.id, { value: n, unit: 'count', direction: 'add' }))}
+          onTakeUnits={(n) => run(() => logAmount(item.id, { units: n, direction: 'remove' }))}
+          onAddUnits={(n) => run(() => logAmount(item.id, { units: n, direction: 'add' }))}
           onFinish={() => run(() => markEmpty(item.id))}
         />
 
@@ -305,7 +314,7 @@ function Details({ item, onDone, removeItem }) {
   async function attach(raw) {
     const picked = await loadServings(raw);
     const portion = defaultServing(picked, item.display_unit || 'item');
-    const per = gramsPerUnit(picked, item.display_unit || 'item');
+    const per = foodUnitGrams(picked, item.display_unit || 'item');
     const next = portion?.grams ?? per.grams ?? (item.grams_each || null);
     setFood(picked);
     setGrams(next ?? '');
@@ -419,7 +428,7 @@ function Details({ item, onDone, removeItem }) {
       </div>
 
       <label className="stack-tight">
-        <span className="label muted">Use by {item.expiry_estimated ? '(estimated)' : ''}</span>
+        <span className="label muted">Use by</span>
         <input type="date" value={form.expiry_date} onChange={set('expiry_date')} />
       </label>
 

@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useInventory } from '../../context/InventoryContext.jsx';
 import { lookupFood, loadServings, PREFER } from '../../api/foodLookup.js';
 import { readPlu, pluQuery, isPluCode } from '../../api/plu.js';
-import { gramsPerUnit } from '../../api/portion.js';
+import { foodUnitGrams } from '../inventory/amounts.js';
 import { guessCategory } from '../inventory/categoryGuess.js';
 import Scanner from '../../components/Scanner.jsx';
 import ReceiptReview from '../receipts/ReceiptReview.jsx';
@@ -105,7 +105,7 @@ export default function ScanSession({ onClose }) {
     try {
       for (const row of rows.filter((r) => r.include && r.name.trim())) {
         const food = row.matchedFood;
-        const { grams } = gramsPerUnit(food, row.unit);
+        const { grams } = foodUnitGrams(food, row.unit);
         await addItem({
           name: row.name.trim(),
           quantity: row.quantity,

@@ -1,7 +1,6 @@
 import { createContext, useContext, useReducer, useEffect, useCallback, useState } from 'react';
 import * as queries from '../db/queries.js';
 import { startSync, syncNow, pendingCount } from '../db/sync.js';
-import { estimateExpiryFor } from '../api/llm.js';
 
 const InventoryContext = createContext(null);
 
@@ -79,22 +78,9 @@ export function InventoryProvider({ householdId, children }) {
 
   const addItem = useCallback(
     async (fields) => {
-      const item = await queries.addItem(householdId, fields);
+      await queries.addItem(householdId, fields);
       await refresh();
       void afterWrite();
-
-      // Estimation runs behind the add: the item is already on screen, and a
-      // slow or failed LLM call must never hold up logging groceries.
-      if (!item.expiry_date) {
-        void (async () => {
-          const estimated = await estimateExpiryFor(item);
-          if (estimated) {
-            await queries.setEstimatedExpiry(householdId, item.id, estimated);
-            await refresh();
-            void afterWrite();
-          }
-        })();
-      }
     },
     [householdId, refresh]
   );

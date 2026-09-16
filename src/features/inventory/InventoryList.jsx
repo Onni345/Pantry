@@ -27,7 +27,6 @@ export default function InventoryList() {
   const { items, loading, error } = useInventory();
   const { index, dir, drag, dragging, go, jump, handlers } = usePager(LOCATIONS.length);
   const location = LOCATIONS[index];
-  const [lens, setLens] = useState('group');
   const [open, setOpen] = useState(null);      // item being viewed in the sheet
   const [adding, setAdding] = useState(false);
   const [scanning, setScanning] = useState(false);
@@ -38,7 +37,7 @@ export default function InventoryList() {
     () => items.filter((i) => i.location === location),
     [items, location]
   );
-  const buckets = useMemo(() => bucketize(here, lens), [here, lens]);
+  const buckets = useMemo(() => bucketize(here), [here]);
 
   const counts = useMemo(() => {
     const c = {};
@@ -112,8 +111,6 @@ export default function InventoryList() {
           <>
           <CategoryRows
             buckets={buckets}
-            lens={lens}
-            onLensChange={setLens}
             onPick={jumpTo}
           />
 

@@ -1,14 +1,16 @@
 /**
- * LLM-backed shelf-life estimation.
+ * Gemini, for the two things in this app that genuinely need judgment:
+ * suggesting recipes, and deciding which product a receipt line names.
+ *
+ * Everything else — reading a receipt, ranking a search, working out what one
+ * egg weighs — is a table or a regex, because those have right answers and a
+ * model would only make them less predictable.
  *
  * The API key is supplied by the user and kept in this browser's local
  * storage — never in .env, never in the built bundle. A bundled key would be
- * readable by anyone with the URL and would spend the owner's quota.
- *
- * Every estimate is cached by food name, so a given food costs one call ever
- * per device. Without a key the app still works: expiry simply stays manual.
+ * readable by anyone with the URL and would spend the owner's quota. Without
+ * one the app still works; these two features simply say they need a key.
  */
-import { db } from '../db/schema.js';
 
 const KEY_STORAGE = 'pantry.llm_api_key';
 /**
@@ -62,71 +64,6 @@ export function setApiKey(key) {
   }
 }
 
-/** Cache key: the food, not the shopping trip. Two bags of carrots share one. */
-const shelfLifeKey = (name, category) =>
-  `${String(name || '').toLowerCase().trim().replace(/\s+/g, ' ')}|${category || ''}`;
-
-const LOCATIONS = ['unopened_fridge', 'opened_fridge', 'freezer', 'pantry'];
-
-/**
- * Validates the model's answer before it is trusted.
- *
- * A language model can return prose, wrong keys, negative numbers or a decade
- * of shelf life for milk. Anything that fails these checks is discarded rather
- * than stored, because a wrong expiry date is worse than no expiry date — it
- * gets acted on.
- */
-function parseShelfLife(raw) {
-  let data = raw;
-  if (typeof raw === 'string') {
-    const match = raw.match(/\{[\s\S]*\}/);
-    if (!match) throw new Error('No JSON object in the response.');
-    data = JSON.parse(match[0]);
-  }
-  if (!data || typeof data !== 'object') throw new Error('Response was not an object.');
-
-  const out = {};
-  for (const loc of LOCATIONS) {
-    const v = data[loc];
-    if (v === null || v === undefined) { out[loc] = null; continue; }
-    const n = Number(v);
-    if (!Number.isFinite(n) || n <= 0) { out[loc] = null; continue; }
-    // Ten years is generous for salt and absurd for anything perishable.
-    out[loc] = n > 3650 ? null : Math.round(n);
-  }
-
-  if (LOCATIONS.every((l) => out[l] === null)) {
-    throw new Error('No usable shelf-life figures in the response.');
-  }
-  return out;
-}
-
-const PROMPT = (name, category) =>
-  `Estimate typical shelf life in DAYS for this food, for home storage.
-
-Food: ${name}
-Category: ${category || 'unknown'}
-
-Use null where storing it that way makes no sense (e.g. pantry for raw fish).
-Base the figures on common food-safety guidance for a domestic fridge at 4C.`;
-
-/**
- * Asks Gemini for the figures with a response schema attached, so the model
- * returns typed JSON rather than prose that has to be scraped. The validation
- * in parseShelfLife still runs: a schema constrains the shape, not the sense —
- * it will happily return 7300 days for milk.
- */
-const RESPONSE_SCHEMA = {
-  type: 'object',
-  properties: {
-    unopened_fridge: { type: 'integer', nullable: true },
-    opened_fridge: { type: 'integer', nullable: true },
-    freezer: { type: 'integer', nullable: true },
-    pantry: { type: 'integer', nullable: true }
-  },
-  required: ['unopened_fridge', 'opened_fridge', 'freezer', 'pantry']
-};
-
 async function requestOnce(model, parts, schema, maxOutputTokens, signal) {
   const res = await fetch(base(model), {
     method: 'POST',
@@ -149,8 +86,8 @@ async function requestOnce(model, parts, schema, maxOutputTokens, signal) {
 
 /**
  * Runs a structured-output request against Gemini, trying MODELS in order
- * until one answers. Shared by shelf-life estimation and recipe suggestions
- * so both get the same model-fallback and error handling for free.
+ * until one answers. Shared by recipe suggestions and receipt matching, so both
+ * get the same model-fallback and error handling for free.
  *
  * `parts` is a Gemini "parts" array — `[{ text }]` for a plain prompt, or
  * `[{ text }, { inlineData: { mimeType, data } }]` to attach an image. A bare
@@ -210,69 +147,6 @@ async function callGeminiJSON(parts, schema, { maxOutputTokens = 300, signal } =
   throw lastError || new Error('Gemini request failed.');
 }
 
-/**
- * Shelf life for a food, in days per storage location.
- * Returns null when there is no key and nothing cached — never guesses.
- */
-async function getShelfLife(name, category, { signal } = {}) {
-  const key = shelfLifeKey(name, category);
-
-  const cached = await db.expiry_cache.get(key);
-  if (cached) return cached.estimated_shelf_life_days;
-
-  if (!hasApiKey()) return null;
-
-  const text = await callGeminiJSON(PROMPT(name, category), RESPONSE_SCHEMA, { signal });
-  const parsed = parseShelfLife(text);
-
-  await db.expiry_cache.put({
-    food_name_or_category: key,
-    estimated_shelf_life_days: parsed,
-    cached_at: new Date().toISOString()
-  });
-
-  return parsed;
-}
-
-/**
- * Which shelf-life figure applies to an item sitting in a given place.
- * Unopened is assumed, since an item is logged when it is bought.
- */
-function daysForLocation(shelfLife, location) {
-  if (!shelfLife) return null;
-  if (location === 'freezer') return shelfLife.freezer ?? shelfLife.unopened_fridge ?? null;
-  if (location === 'fridge') return shelfLife.unopened_fridge ?? shelfLife.opened_fridge ?? null;
-  if (location === 'pantry') return shelfLife.pantry ?? shelfLife.unopened_fridge ?? null;
-  return null;
-}
-
-function expiryDateFrom(days, from = new Date()) {
-  if (!days) return null;
-  const d = new Date(from);
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-/** Best-effort estimate for a newly added item. Never throws into the UI. */
-export async function estimateExpiryFor(item) {
-  try {
-    const shelfLife = await getShelfLife(item.name, item.category);
-    const days = daysForLocation(shelfLife, item.location);
-    return expiryDateFrom(days, new Date(item.created_at));
-  } catch (e) {
-    console.warn('expiry: estimate failed', e.message);
-    return null;
-  }
-}
-
-
-/**
- * Asks Gemini for recipe ideas grounded in the current inventory.
- * Costs one real call every time — this has no cache, since a recipe result
- * is only valid for the exact stock it was generated from, and a cache key
- * that changes on every use/add would essentially never hit.
- */
 export async function suggestRecipes(items, { signal } = {}) {
   const { buildPrompt, parseRecipes, eligibleItems } = await import('../features/recipes/recipes.js');
 

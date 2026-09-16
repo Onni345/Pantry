@@ -97,5 +97,3 @@
   .group-preview { font-size: 14px; }
 }
 
-.groups-lens { justify-content: flex-end; margin-top: var(--space-3); }
-.groups-lens select { width: auto; }

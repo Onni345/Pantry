@@ -78,7 +78,7 @@ export const ITEMS = [
 ];
 
 /** Stable per-item id, so the SQL seed replaces rather than duplicates. */
-export const slugOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const slugOf = (name) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 export const foodIdOf = (item) => `sample:${slugOf(item.name)}`;
 
 export const isoDaysFromNow = (days, from = Date.now()) =>

@@ -10,7 +10,7 @@
 import { db, EVENT_TYPES } from './schema.js';
 import { getDeviceId } from '../auth/household.js';
 import { toBase, baseUnitFor } from '../units.js';
-import { gramsToDelta } from '../features/inventory/amounts.js';
+import { gramsToDelta, gramsPerUnit } from '../features/inventory/amounts.js';
 // Pure helpers, no Dexie or React of their own. Imported rather than
 // reimplemented so "what counts as eating" has exactly one definition — the
 // intake screen and the intake reset must agree or the reset won't zero it.
@@ -117,10 +117,41 @@ export async function addItem(householdId, fields) {
  * "-56.7".
  */
 export async function logAmount(
-  householdId, itemId, { value, unit, grams, direction = 'remove', type, at = null }
+  householdId, itemId, { value, unit, grams, units, direction = 'remove', type, at = null }
 ) {
   const item = await db.items.get(itemId);
   if (!item) throw new Error('Item not found.');
+
+  /* `units` is "this many of whatever it is counted in" — one egg, one
+   * potato, one jar — and it is the one the buttons use.
+   *
+   * It exists because the obvious spelling was wrong. The sheet used to send
+   * { value: 1, unit: 'count' }, which toBase refuses for a grams-based item:
+   * converting counts to grams needs to know what one of them weighs, which
+   * units.js has no business knowing. So the primary button threw on every
+   * item bought by weight — rice, a bag of potatoes — and the sheet swallowed
+   * the error, so it simply looked like nothing happened.
+   *
+   * The item DOES know what one weighs, so the conversion belongs here. */
+  if (units != null) {
+    const n = Number(units);
+    if (!Number.isFinite(n) || n <= 0) throw new Error('Enter an amount greater than zero.');
+
+    if (item.base_unit === 'count') {
+      grams = null;
+      value = n;
+      unit = 'count';
+    } else {
+      const per = gramsPerUnit(item);
+      if (!per) {
+        throw new Error(
+          `Nobody has recorded what one ${item.display_unit || 'unit'} of this weighs, ` +
+          'so it can only be used by the gram.'
+        );
+      }
+      grams = n * per;
+    }
+  }
 
   // Grams are accepted for any item whose weight is known, whatever it is
   // counted in — that is what lets a jar counted as "1 jar" give up a 32 g
@@ -199,13 +230,6 @@ async function logBaseDelta(householdId, itemId, baseDelta, type, extra = {}) {
 }
 
 /** Fills in an estimated expiry date after the fact, if the item has none. */
-export async function setEstimatedExpiry(householdId, itemId, expiry_date) {
-  if (!expiry_date) return null;
-  const item = await db.items.get(itemId);
-  if (!item || item.expiry_date) return null;
-  return updateItem(householdId, itemId, { expiry_date, expiry_estimated: 1 });
-}
-
 export async function updateItem(householdId, itemId, changes) {
   const existing = await db.items.get(itemId);
   if (!existing) throw new Error('Item not found.');

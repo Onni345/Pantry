@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useInventory } from '../../context/InventoryContext.jsx';
 import { lookupFood } from '../../api/foodLookup.js';
-import { gramsPerUnit, defaultServing, hasConfidentServings } from '../../api/portion.js';
+import { foodUnitGrams, defaultServing, servingsFor } from './amounts.js';
 import { loadServings } from '../../api/foodLookup.js';
 import FoodSearchSheet from '../../components/FoodSearchSheet.jsx';
 import ServingPicker from '../../components/ServingPicker.jsx';
@@ -85,8 +85,8 @@ function ManualAdd({ onDone, onBack, initial = {} }) {
 
   // A picked portion wins outright — it is what the person chose. Otherwise
   // fall back to working out what one of `unit` weighs.
-  const per = gramsPerUnit(food, unit);
-  const usePicker = hasConfidentServings(food);
+  const per = foodUnitGrams(food, unit);
+  const usePicker = servingsFor(food).length > 0;
   const gramsEach = serving?.grams ?? per.grams;
 
   async function submit(e) {

@@ -5,8 +5,8 @@
  * than no dropdown, because it looks like the app knows something. So most
  * of what follows checks that nothing is offered when nothing is known.
  */
-import { servingsFor, defaultServing, hasConfidentServings, gramsPerUnit }
-  from '../../src/api/portion.js';
+import { servingsFor, defaultServing, foodUnitGrams }
+  from '../../src/features/inventory/amounts.js';
 
 let pass = 0, fail = 0;
 const t = (n, fn) => { try { fn(); console.log('PASS ', n); pass++; }
@@ -25,11 +25,11 @@ t('eggs default to large, not to the biggest option', () => {
 
 t('NOTHING is offered for a food we know nothing about', () => {
   eq(servingsFor({ name: 'Item 18492' }).length, 0, 'no options');
-  eq(hasConfidentServings({ name: 'Item 18492' }), false, 'no picker');
+  eq(((f) => servingsFor(f).length > 0)({ name: 'Item 18492' }), false, 'no picker');
   // And the silent fallback still works — this is the difference between
   // "no menu" and "no number".
-  eq(gramsPerUnit({ name: 'Item 18492' }, 'egg').grams, 50, 'guess still available');
-  eq(gramsPerUnit({ name: 'Item 18492' }, 'egg').exact, false, 'and still labelled a guess');
+  eq(foodUnitGrams({ name: 'Item 18492' }, 'egg').grams, 50, 'guess still available');
+  eq(foodUnitGrams({ name: 'Item 18492' }, 'egg').exact, false, 'and still labelled a guess');
 });
 
 t('the guess table never leaks into the menu', () => {

@@ -1,4 +1,3 @@
-import { LENSES } from './lenses.js';
 import './groups.css';
 
 /**
@@ -9,7 +8,7 @@ import './groups.css';
  * anything in it needs using — four facts, no interaction, no legend to
  * learn. Tapping jumps to that part of the list below.
  */
-export default function CategoryRows({ buckets, lens, onLensChange, onPick }) {
+export default function CategoryRows({ buckets, onPick }) {
   if (buckets.length === 0) return null;
 
   return (
@@ -18,15 +17,6 @@ export default function CategoryRows({ buckets, lens, onLensChange, onPick }) {
         {buckets.map((bucket, i) => (
           <GroupRow key={bucket.name} bucket={bucket} index={i} onPick={() => onPick(bucket.name)} />
         ))}
-      </div>
-
-      <div className="row groups-lens">
-        <span className="label muted">Grouped by</span>
-        <select value={lens} onChange={(e) => onLensChange(e.target.value)} aria-label="Group by">
-          {LENSES.map((l) => (
-            <option key={l.key} value={l.key}>{l.label}</option>
-          ))}
-        </select>
       </div>
     </div>
   );

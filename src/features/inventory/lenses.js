@@ -1,18 +1,13 @@
 /**
- * Lenses: the same food, grouped three ways.
+ * Grouping food the way people think about it.
  *
- * The canvas and the list below it are one UI primitive seen through a
- * different lens — not three dashboards. A lens says which bucket an item
- * falls into, what that bucket is called, and what colour it wears.
+ * There used to be three lenses here — food group, dominant macro, and use-by
+ * date — and a switcher to move between them. Two of the three answered
+ * questions nobody stood at the fridge asking, so they went; the rows below
+ * the header are simply food groups now.
  *
  * Pure — no React, no Dexie.
  */
-
-export const LENSES = [
-  { key: 'group', label: 'Food group' },
-  { key: 'macro', label: 'Macros' },
-  { key: 'expiry', label: 'Use by' }
-];
 
 /** The app's storage categories, folded into the groups people actually think in. */
 const GROUP_OF = {
@@ -34,45 +29,13 @@ const GROUP_ORDER = [
   'Protein', 'Produce', 'Dairy', 'Grains', 'Frozen', 'Pantry staples', 'Snacks', 'Drinks', 'Other'
 ];
 
-/**
- * Which macro an item mostly is, by whichever of the three contributes most
- * of its calories. Items with no macro data sit in their own bucket rather
- * than being guessed into one — the app would rather say "unknown" than
- * invent a number (see principle: missing information is acceptable).
- */
-function macroOf(item) {
-  const m = item.macros;
-  if (!m) return 'Unknown';
-  const cals = { Protein: (m.protein_g ?? 0) * 4, Carbs: (m.carbs_g ?? 0) * 4, Fat: (m.fat_g ?? 0) * 9 };
-  const total = cals.Protein + cals.Carbs + cals.Fat;
-  if (total <= 0) return 'Unknown';
-  return Object.entries(cals).sort((a, b) => b[1] - a[1])[0][0];
-}
-
-const MACRO_ORDER = ['Protein', 'Carbs', 'Fat', 'Unknown'];
-
-function expiryOf(item) {
-  if (!item.expiry_date) return 'No date';
-  const days = Math.round((Date.parse(item.expiry_date) - Date.now()) / 86400000);
-  if (days < 0) return 'Past date';
-  if (days <= 3) return 'Use now';
-  if (days <= 10) return 'This week';
-  return 'Keeps';
-}
-
-const EXPIRY_ORDER = ['Past date', 'Use now', 'This week', 'Keeps', 'No date'];
-
-const BUCKETS = {
-  group: { of: (i) => GROUP_OF[i.category] || 'Other', order: GROUP_ORDER },
-  macro: { of: macroOf, order: MACRO_ORDER },
-  expiry: { of: expiryOf, order: EXPIRY_ORDER }
-};
+const BUCKET = { of: (i) => GROUP_OF[i.category] || 'Other', order: GROUP_ORDER };
 
 /** CSS custom-property name carrying this bucket's colour. */
 const toneVar = (bucket) => `--tone-${bucket.toLowerCase().replace(/[^a-z]+/g, '-')}`;
 
 /**
- * Items bucketed by the given lens, in the lens's own order, with a
+ * Items bucketed by food group, in a fixed order, with a
  * `presence` figure for sizing the canvas.
  *
  * Presence is the number of *items*, deliberately not their grams or
@@ -80,8 +43,8 @@ const toneVar = (bucket) => `--tone-${bucket.toLowerCase().replace(/[^a-z]+/g, '
  * answers "what kind of stuff is in here", not "what weighs the most". Rare
  * things stay visible; nothing computes a percentage it can't defend.
  */
-export function bucketize(items, lensKey) {
-  const lens = BUCKETS[lensKey] || BUCKETS.group;
+export function bucketize(items) {
+  const lens = BUCKET;
   const found = new Map();
 
   for (const item of items) {

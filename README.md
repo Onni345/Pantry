@@ -24,7 +24,8 @@ The Gemini key is **not** an env var — it's entered in the app itself (Setting
 per browser. See "Where things are stored" below for why.
 
 It is also **optional**, and deliberately narrow in scope. A model is used for recipe
-ideas (a creative task with no right answer) and shelf-life estimates. Nothing that makes
+ideas (a creative task with no right answer) and deciding which product a receipt
+line names. Nothing that makes
 the app *run* depends on one: adding, weighing, sorting, syncing, and reading a receipt
 are all plain code, and work offline with no key and no quota. If you're adding a feature,
 that's the line to hold — if the task has a right answer you could look up or compute,
@@ -52,10 +53,9 @@ folder for the shape those took.
 
 | Script | What it does |
 |---|---|
-| `screens.mjs` (`npm run screens`) | Renders every screen to a PNG at phone (390px) and laptop (1000px) widths into `screens/`. `npm run smoke` proves a screen doesn't crash; this proves it doesn't look broken — a clipped number or a wrapped field is invisible to a render test and obvious in a picture. |
 | `rls-test.mjs` | Spins up two throwaway anonymous-ish sessions against your real Supabase project and checks cross-household reads/writes are actually refused by Postgres, not just unrequested by the app. Reads `.env`. |
 | `food-lookup-probe.mjs` | Runs a real USDA + Open Food Facts search through the app's own ranking/dedupe/plausibility code and prints what survives. Useful after touching `foodQuality.js`. |
-| `gemini-probe.mjs <key>` | Lists every model your Gemini key can call, then live-tests each candidate with the actual structured-output schema the app uses. Run this whenever expiry estimation starts 404ing — Google renames/retires models on its own schedule. |
+| `gemini-probe.mjs <key>` | Lists every model your Gemini key can call, then live-tests each candidate with the actual structured-output schema the app uses. Run this whenever recipes or receipt matching start 404ing — Google renames/retires models on its own schedule. |
 
 ```bash
 node scripts/rls-test.mjs
@@ -76,7 +76,7 @@ varied depletion — plus a day's intake already logged, so the Intake tab isn't
 empty either.
 
 Edit the list in `src/dev/sampleFridge.js`. One table feeds three things: the
-button, the screenshot harness, and the SQL seed — so they can't drift.
+button and the dev fixture — so they can't drift.
 
 It **replaces** what's there. That's the point: somewhere known to come back to.
 `import.meta.env.DEV` gates it, so the button and the data are dropped from a
@@ -86,7 +86,6 @@ production build entirely.
 sample down without dev tools):
 
 ```bash
-npm run sample-sql     # regenerates supabase/sample-fridge.sql from the table
 ```
 
 Then paste that file into the Supabase SQL editor, changing the household id on

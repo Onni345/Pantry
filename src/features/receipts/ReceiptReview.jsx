@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import FoodSearchSheet from '../../components/FoodSearchSheet.jsx';
-import { gramsPerUnit, servingsFor, defaultServing } from '../../api/portion.js';
+import { foodUnitGrams, servingsFor, defaultServing } from '../inventory/amounts.js';
 import { loadServings } from '../../api/foodLookup.js';
 import ServingPicker from '../../components/ServingPicker.jsx';
 import { confidenceOf, includedRows } from './receipts.js';
@@ -191,7 +191,7 @@ export function ItemCard({ row, onEdit }) {
   const level = confidenceOf(row);
   const food = row.matchedFood;
   const m = food?.macros_per_unit || {};
-  const per = gramsPerUnit(food, row.unit);
+  const per = foodUnitGrams(food, row.unit);
 
   return (
     <div className="item-card">

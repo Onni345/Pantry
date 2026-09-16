@@ -1,4 +1,4 @@
-import { servingsFor } from '../api/portion.js';
+import { servingsFor } from '../features/inventory/amounts.js';
 import './ServingPicker.css';
 
 /**

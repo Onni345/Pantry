@@ -22,12 +22,6 @@ import { gramsPerUnit } from '../inventory/amounts.js';
 
 export const CONSUMPTION_TYPES = new Set(['remove', 'consumed_remainder']);
 
-export const RANGES = [
-  { key: 'today', label: 'Today', days: 1 },
-  { key: 'week', label: 'Last 7 days', days: 7 },
-  { key: 'month', label: 'Last 30 days', days: 30 }
-];
-
 /** Start of the local day, `days - 1` days back. Windows are whole days. */
 export function windowStart(days, now = new Date()) {
   const d = new Date(now);
@@ -65,7 +59,6 @@ export function summarize({ items, events, foods }, { days = 1, now = new Date()
   let gramsCounted = 0;      // weighed, matched to a food
   let gramsUnmatched = 0;    // weighed, but no food record
   let countedUnits = 0;      // counted items — cannot be converted
-  const perItem = new Map();
 
   for (const e of events) {
     const at = Date.parse(e.timestamp);
@@ -98,17 +91,10 @@ export function summarize({ items, events, foods }, { days = 1, now = new Date()
     gramsCounted += asGrams;
     const factor = asGrams / 100;
 
-    const row = perItem.get(item.id) || { id: item.id, name: item.name, grams: 0, ...EMPTY };
-    row.grams += asGrams;
-
     for (const key of ['calories', 'protein_g', 'carbs_g', 'fat_g']) {
       const v = Number(macros[key]);
-      if (Number.isFinite(v)) {
-        totals[key] += v * factor;
-        row[key] += v * factor;
-      }
+      if (Number.isFinite(v)) totals[key] += v * factor;
     }
-    perItem.set(item.id, row);
   }
 
   const gramsTotal = gramsCounted + gramsUnmatched;
@@ -120,12 +106,6 @@ export function summarize({ items, events, foods }, { days = 1, now = new Date()
       carbs_g: round(totals.carbs_g, 1),
       fat_g: round(totals.fat_g, 1)
     },
-    perDay: days > 1 ? {
-      calories: round(totals.calories / days, 0),
-      protein_g: round(totals.protein_g / days, 1),
-      carbs_g: round(totals.carbs_g / days, 1),
-      fat_g: round(totals.fat_g / days, 1)
-    } : null,
     // Coverage is reported, never hidden. A total built from a third of what
     // you ate is not a total, and the UI should be able to say so.
     coverage: {
@@ -134,17 +114,6 @@ export function summarize({ items, events, foods }, { days = 1, now = new Date()
       countedUnits: round(countedUnits, 2),
       fraction: gramsTotal > 0 ? gramsCounted / gramsTotal : null
     },
-    topItems: [...perItem.values()]
-      .sort((a, b) => b.calories - a.calories || b.grams - a.grams)
-      .slice(0, 8)
-      .map((r) => ({
-        ...r,
-        grams: round(r.grams, 1),
-        calories: round(r.calories, 0),
-        protein_g: round(r.protein_g, 1),
-        carbs_g: round(r.carbs_g, 1),
-        fat_g: round(r.fat_g, 1)
-      })),
     days
   };
 }

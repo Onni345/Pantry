@@ -1,6 +1,6 @@
 import { extractCandidateLines, toRows, confidenceOf, includedRows }
   from '../../src/features/receipts/receipts.js';
-import { gramsPerUnit } from '../../src/api/portion.js';
+import { foodUnitGrams } from '../../src/features/inventory/amounts.js';
 
 let pass = 0, fail = 0;
 const t = (n, fn) => { try { fn(); console.log('PASS ', n); pass++; }
@@ -87,11 +87,11 @@ t('skipped rows never reach the fridge', () => {
 
 t('a pack of cheese saves the grams that make macros possible', () => {
   const cheese = { name: 'Sliced Cheddar', package_grams: 227, serving_text: '1 slice', serving_grams: 21 };
-  eq(gramsPerUnit(cheese, 'pack').grams, 227, 'a pack weighs the package');
-  eq(gramsPerUnit(cheese, 'slice').grams, 21, 'a slice weighs the serving');
+  eq(foodUnitGrams(cheese, 'pack').grams, 227, 'a pack weighs the package');
+  eq(foodUnitGrams(cheese, 'slice').grams, 21, 'a slice weighs the serving');
   // The bug this fixes: before, grams_each was never set by anything but the
   // dev fixture, so both of these were null and the item scored zero calories.
-  eq(gramsPerUnit(null, 'pack').grams, null, 'no food, no package weight');
+  eq(foodUnitGrams(null, 'pack').grams, null, 'no food, no package weight');
 });
 
 console.log(`\n${pass} passed, ${fail} failed`);
