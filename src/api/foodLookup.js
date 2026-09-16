@@ -157,6 +157,14 @@ const hasMacros = (r) =>
     ([k, v]) => k !== 'basis' && v !== null && v !== 0
   );
 
+/**
+ * A 0-calorie result is almost always a data gap (an unpublished energy
+ * value, not an actual zero-calorie food), and it makes the item useless for
+ * intake tracking either way — so it's excluded outright rather than shown
+ * and left for someone to notice later.
+ */
+const hasCalories = (r) => Number(r.macros_per_unit?.calories) > 0;
+
 
 async function getJson(url, signal) {
   const res = await fetch(url, { signal });
@@ -400,11 +408,14 @@ export async function lookupFood(
             : 'Could not reach the food database. Cached results only.';
   }
 
-  const fresh = results.filter(hasMacros).filter(isPlausible);
+  const fresh = results.filter(hasMacros).filter(hasCalories).filter(isPlausible);
   await Promise.all(fresh.map(cacheFood));
 
+  // `cached` can hold results saved before this filter existed, so it's
+  // re-applied here too -- old zero-calorie cache entries stop surfacing
+  // without needing a migration to clean them out.
   const ranked = rankResults(
-    dedupe([...cached, ...fresh]), q,
+    dedupe([...cached, ...fresh]).filter(hasCalories), q,
     { prefer, brand, knownBrands: ALL_STORE_BRANDS }
   );
 
