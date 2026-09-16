@@ -206,17 +206,31 @@ async function pullTable(table, householdId, since, toLocal) {
  * Same shape as `pullTable`, but food_cache has no household_id — it's a
  * shared cache of public reference data, so every device pulls every food
  * anyone has ever looked up rather than just its own household's.
+ *
+ * Never throws. Before patch-006 has been run against a household's
+ * Supabase project, this table doesn't exist yet and every call here comes
+ * back a 404/42P01. That must not take items and events down with it — this
+ * used to be a plain Promise.all with pullTable, so one missing table
+ * silently failed the ENTIRE sync cycle, items and events included, until
+ * the migration ran. Degrading to "no foods this round" instead means
+ * everything else keeps syncing while food nutrition alone waits on the
+ * migration.
  */
 async function pullFoodCache(since) {
-  const { data, error } = await supabase
-    .from('food_cache')
-    .select('*')
-    .gt('server_updated_at', since)
-    .order('server_updated_at', { ascending: true })
-    .limit(1000);
+  try {
+    const { data, error } = await supabase
+      .from('food_cache')
+      .select('*')
+      .gt('server_updated_at', since)
+      .order('server_updated_at', { ascending: true })
+      .limit(1000);
 
-  if (error) throw error;
-  return { rows: (data || []).map(foodToLocal), raw: data || [] };
+    if (error) throw error;
+    return { rows: (data || []).map(foodToLocal), raw: data || [] };
+  } catch (e) {
+    console.warn('sync: food_cache pull failed (has patch-006 been run?)', e.message);
+    return { rows: [], raw: [] };
+  }
 }
 
 async function pull(householdId) {

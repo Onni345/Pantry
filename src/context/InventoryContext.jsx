@@ -1,6 +1,7 @@
 import { createContext, useContext, useReducer, useEffect, useCallback, useState } from 'react';
 import * as queries from '../db/queries.js';
 import { startSync, syncNow, pendingCount } from '../db/sync.js';
+import { estimateExpiryFor } from '../api/llm.js';
 
 const InventoryContext = createContext(null);
 
@@ -78,9 +79,22 @@ export function InventoryProvider({ householdId, children }) {
 
   const addItem = useCallback(
     async (fields) => {
-      await queries.addItem(householdId, fields);
+      const item = await queries.addItem(householdId, fields);
       await refresh();
       void afterWrite();
+
+      // Estimation runs behind the add: the item is already on screen, and a
+      // slow or failed LLM call must never hold up logging groceries.
+      if (!item.expiry_date) {
+        void (async () => {
+          const estimated = await estimateExpiryFor(item);
+          if (estimated) {
+            await queries.setEstimatedExpiry(householdId, item.id, estimated);
+            await refresh();
+            void afterWrite();
+          }
+        })();
+      }
     },
     [householdId, refresh]
   );
@@ -121,52 +135,9 @@ export function InventoryProvider({ householdId, children }) {
     [householdId, refresh]
   );
 
-  const updateItem = useCallback(
-    async (itemId, changes) => {
-      await queries.updateItem(householdId, itemId, changes);
-      await refresh();
-      void afterWrite();
-    },
-    [householdId, refresh]
-  );
-
-  const clearAllItems = useCallback(
-    async () => {
-      const count = await queries.clearAllItems(householdId);
-      await refresh();
-      void afterWrite();
-      return count;
-    },
-    [householdId, refresh]
-  );
-
-  // Dev fixture. `import.meta.env.DEV` is false in a production build, so the
-  // whole thing — button, data table and all — is dropped at build time.
-  const loadSample = useCallback(
-    async () => {
-      const { loadSampleFridge } = await import('../dev/sampleFridge.js');
-      const count = await loadSampleFridge(householdId, queries);
-      await refresh();
-      void afterWrite();
-      return count;
-    },
-    [householdId, refresh]
-  );
-
-  const resetIntake = useCallback(
-    async () => {
-      const count = await queries.resetIntake(householdId);
-      await refresh();
-      void afterWrite();
-      return count;
-    },
-    [householdId, refresh]
-  );
-
   const value = {
     ...state, householdId, sync,
-    addItem, logAmount, undoLast, markEmpty, removeItem, updateItem, refresh,
-    clearAllItems, resetIntake, loadSample,
+    addItem, logAmount, undoLast, markEmpty, removeItem, refresh,
     syncNow: () => afterWrite()
   };
   return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;
