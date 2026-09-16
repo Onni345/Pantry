@@ -1,7 +1,6 @@
 import { createContext, useContext, useReducer, useEffect, useCallback, useState } from 'react';
 import * as queries from '../db/queries.js';
-import { startSync, syncNow, pendingCount } from '../db/sync.js';
-import { estimateExpiryFor } from '../api/llm.js';
+import { startSync, syncNow, pendingCount, healMissingFoodCache } from '../db/sync.js';
 
 const InventoryContext = createContext(null);
 
@@ -34,6 +33,15 @@ export function InventoryProvider({ householdId, children }) {
     try {
       const items = await queries.listItems(householdId);
       dispatch({ type: 'loaded', items });
+
+      // Belt-and-braces for the sync's food_cache gap: if any item points at
+      // a food this device hasn't got yet, fetch that one row directly
+      // rather than waiting on the next cursor-based pull. Re-derives the
+      // list again only when something was actually missing.
+      const healed = await healMissingFoodCache(items);
+      if (healed > 0) {
+        dispatch({ type: 'loaded', items: await queries.listItems(householdId) });
+      }
     } catch (e) {
       dispatch({ type: 'error', error: e.message || String(e) });
     }
@@ -79,22 +87,9 @@ export function InventoryProvider({ householdId, children }) {
 
   const addItem = useCallback(
     async (fields) => {
-      const item = await queries.addItem(householdId, fields);
+      await queries.addItem(householdId, fields);
       await refresh();
       void afterWrite();
-
-      // Estimation runs behind the add: the item is already on screen, and a
-      // slow or failed LLM call must never hold up logging groceries.
-      if (!item.expiry_date) {
-        void (async () => {
-          const estimated = await estimateExpiryFor(item);
-          if (estimated) {
-            await queries.setEstimatedExpiry(householdId, item.id, estimated);
-            await refresh();
-            void afterWrite();
-          }
-        })();
-      }
     },
     [householdId, refresh]
   );
@@ -135,9 +130,52 @@ export function InventoryProvider({ householdId, children }) {
     [householdId, refresh]
   );
 
+  const updateItem = useCallback(
+    async (itemId, changes) => {
+      await queries.updateItem(householdId, itemId, changes);
+      await refresh();
+      void afterWrite();
+    },
+    [householdId, refresh]
+  );
+
+  const clearAllItems = useCallback(
+    async () => {
+      const count = await queries.clearAllItems(householdId);
+      await refresh();
+      void afterWrite();
+      return count;
+    },
+    [householdId, refresh]
+  );
+
+  // Dev fixture. `import.meta.env.DEV` is false in a production build, so the
+  // whole thing — button, data table and all — is dropped at build time.
+  const loadSample = useCallback(
+    async () => {
+      const { loadSampleFridge } = await import('../dev/sampleFridge.js');
+      const count = await loadSampleFridge(householdId, queries);
+      await refresh();
+      void afterWrite();
+      return count;
+    },
+    [householdId, refresh]
+  );
+
+  const resetIntake = useCallback(
+    async () => {
+      const count = await queries.resetIntake(householdId);
+      await refresh();
+      void afterWrite();
+      return count;
+    },
+    [householdId, refresh]
+  );
+
   const value = {
     ...state, householdId, sync,
-    addItem, logAmount, undoLast, markEmpty, removeItem, refresh,
+    addItem, logAmount, undoLast, markEmpty, removeItem, updateItem, refresh,
+    clearAllItems, resetIntake, loadSample,
     syncNow: () => afterWrite()
   };
   return <InventoryContext.Provider value={value}>{children}</InventoryContext.Provider>;
