@@ -22,8 +22,8 @@ export default defineConfig({
         name: 'Pantry',
         short_name: 'Pantry',
         description: 'Household food inventory',
-        theme_color: '#1f1f1f',
-        background_color: '#ffffff',
+        theme_color: '#17150f',
+        background_color: '#17150f',
         display: 'standalone',
         // Relative, so it resolves against wherever the app is served from —
         // the root in development, /<repo>/ on Pages — without this file

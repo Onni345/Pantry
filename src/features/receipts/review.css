@@ -274,6 +274,7 @@
   background: var(--tone-review);
   border-color: var(--review-line);
   box-shadow: 0 0 0 3px var(--review-glow);
+  color: var(--review-ink); /* sits on the review pastel, not the page bg */
 }
 
 /* ------------------------------------------------------------------ wide */

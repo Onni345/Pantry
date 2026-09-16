@@ -8,9 +8,8 @@ import PackSize from '../../components/PackSize.jsx';
 import '../../components/PackSize.css';
 import FoodSearchSheet from '../../components/FoodSearchSheet.jsx';
 import { perUnit, inStock, macroGap, formatCalories } from '../../features/macros/perItem.js';
-import { niceNumber, pluralize } from '../../units.js';
-import { describe, portionsFor, gramsToDelta, supportsGrams, nounOf } from './amounts.js';
-import { formatGrams } from '../../units.js';
+import { niceNumber, pluralize, round, formatGrams } from '../../units.js';
+import { describe, gramsPerUnit, stockGrams, nounOf } from './amounts.js';
 import { CATEGORIES, LOCATIONS } from '../../db/schema.js';
 import './sheet.css';
 
@@ -98,7 +97,6 @@ export default function ItemSheet({ item, onClose }) {
           busy={busy}
           onTakeGrams={(g) => run(() => logAmount(item.id, { grams: g, direction: 'remove' }))}
           onTakeUnits={(n) => run(() => logAmount(item.id, { units: n, direction: 'remove' }))}
-          onAddUnits={(n) => run(() => logAmount(item.id, { units: n, direction: 'add' }))}
           onFinish={() => run(() => markEmpty(item.id))}
         />
 
@@ -127,133 +125,130 @@ export default function ItemSheet({ item, onClose }) {
 
 
 /**
- * Taking some.
+ * Using some.
  *
- * Both ways, always, on every item — a row of named portions and a gram
- * field. The app deliberately does not try to guess whether a thing divides:
- * guessing that a potato is whole-only is right until someone grates one, and
- * a wrong guess is a dead end where showing both is one extra chip.
+ * This sheet only ever removes stock — there is no "+", on purpose. Adding
+ * more of something you already have belongs to scanning or "Add by hand",
+ * where a quantity is being declared; tapping an existing item is always
+ * about what just got eaten or used.
  *
- * The portions are the loud part because they are the common case. Grams sit
- * underneath, quiet, for when the chips don't fit what you did.
+ * Count and weight used to be two separate controls — a stepper, then a
+ * hidden grams form behind a link — as if they were different actions. They
+ * aren't: "3 eggs" and "150 g" are the same fact about the same eggs. So
+ * there is one number field, and when both readings make sense a quiet
+ * toggle picks which unit that number is in, converting what's already typed
+ * rather than blanking it. The other reading shows underneath as a check,
+ * not a second thing to fill in. Nothing touches the inventory until Use.
  */
-function Take({ item, food, busy, onTakeGrams, onTakeUnits, onAddUnits, onFinish }) {
-  const [grams, setGrams] = useState('');
-  const [gramsOpen, setGramsOpen] = useState(false);
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState('');
-  const portions = portionsFor(item, food);
-  const canGrams = supportsGrams(item);
-  const noun = nounOf(item) || 'item';
+function Take({ item, food, busy, onTakeGrams, onTakeUnits, onFinish }) {
+  const isWeighed = item.base_unit === 'g';
+  const noun = nounOf(item); // null for a pure-weight item — it has no "one"
+  const per = gramsPerUnit(item); // grams in one noun-unit, if known
+  const canToggle = !isWeighed && per != null;
   const empty = item.quantity <= 0;
+  const total = stockGrams(item); // everything in stock, in grams, if knowable
 
-  function commitDraft() {
-    const n = Number(draft);
-    setEditing(false);
-    setDraft('');
-    if (n > 0) onAddUnits(n);
+  const [unit, setUnit] = useState(isWeighed ? 'g' : 'unit');
+  const [amount, setAmount] = useState('');
+
+  useEffect(() => { setUnit(isWeighed ? 'g' : 'unit'); setAmount(''); }, [item.id, isWeighed]);
+
+  const n = Number(amount);
+  const valid = Number.isFinite(n) && n > 0;
+  const unitLabel = unit === 'g' ? 'g' : pluralize(noun || 'item', n || 2);
+  const maxAmount = unit === 'unit' ? item.quantity : (total ?? Infinity);
+
+  function clamp(v) {
+    if (!Number.isFinite(v)) return '';
+    return String(Math.max(0, Math.min(v, maxAmount)));
   }
+
+  function switchUnit(next) {
+    if (next === unit || !canToggle) return;
+    if (valid) {
+      const grams = unit === 'g' ? n : n * per;
+      const converted = next === 'g' ? round(grams, 0) : round(grams / per, 2);
+      setAmount(clamp(converted));
+    }
+    setUnit(next);
+  }
+
+  function nudge() {
+    setAmount((a) => clamp((Number(a) || 0) + 1));
+  }
+
+  function commit() {
+    if (!valid) return;
+    const capped = Math.min(n, maxAmount);
+    if (unit === 'g') onTakeGrams(capped);
+    else onTakeUnits(capped);
+    setAmount('');
+  }
+
+  const equivalent = valid && canToggle
+    ? (unit === 'unit'
+        ? `≈ ${formatGrams(n * per)}`
+        : `≈ ${niceNumber(round(n / per, 2))} ${pluralize(noun, n / per)}`)
+    : null;
 
   return (
     <div className="stack-tight take">
-      {/* One control, not three: -1/+1 for the common nudge, and the middle
-          becomes a field the moment you tap it, for "I actually bought 6
-          more" without six taps or a separate row to hold the typed case. */}
-      <div className="stepper" role="group" aria-label={`Adjust ${pluralize(noun, 2)}`}>
-        <button
-          type="button" className="stepper-btn"
-          onClick={() => onTakeUnits(1)}
-          disabled={busy || empty}
-          aria-label={`Take one ${noun}`}
-        >
-          &minus;
-        </button>
-        {editing ? (
-          <input
-            className="stepper-input"
-            type="number" inputMode="decimal" min="0" step="any" autoFocus
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            onBlur={commitDraft}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') { e.preventDefault(); commitDraft(); }
-              if (e.key === 'Escape') { setEditing(false); setDraft(''); }
-            }}
-            placeholder="0"
-            aria-label={`Number of ${pluralize(noun, 2)} to add`}
-          />
-        ) : (
+      {canToggle && (
+        <div className="qty-toggle" role="tablist" aria-label="Count by">
           <button
-            type="button" className="stepper-label"
-            onClick={() => setEditing(true)}
-            disabled={busy}
+            type="button" role="tab" aria-selected={unit === 'unit'}
+            className={unit === 'unit' ? 'is-active' : ''}
+            onClick={() => switchUnit('unit')} disabled={busy}
           >
             {pluralize(noun, 2)}
           </button>
-        )}
-        <button
-          type="button" className="stepper-btn"
-          onClick={() => onAddUnits(1)}
-          disabled={busy}
-          aria-label={`Add one ${noun}`}
-        >
-          +
-        </button>
-      </div>
-
-      {portions.length > 0 && (
-        <div className="row wrap take-portions">
-          {portions.map((p) => (
-            <button
-              key={p.label}
-              className="chip"
-              disabled={busy || empty || !p.grams}
-              onClick={() => p.grams && onTakeGrams(p.grams)}
-            >
-              {p.label}
-              {p.grams && <span className="label muted"> {formatGrams(p.grams)}</span>}
-            </button>
-          ))}
-          <button className="chip" onClick={onFinish} disabled={busy || empty}>
-            Finished it
+          <button
+            type="button" role="tab" aria-selected={unit === 'g'}
+            className={unit === 'g' ? 'is-active' : ''}
+            onClick={() => switchUnit('g')} disabled={busy}
+          >
+            grams
           </button>
         </div>
       )}
 
-      {/* Quiet by default -- an exact-gram entry is the rare case, so it
-          costs a tap to reveal rather than a permanent row on every item. */}
-      {canGrams && (
-        gramsOpen ? (
-          <form
-            className="row take-grams"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const g = Number(grams);
-              if (g > 0 && gramsToDelta(item, g) != null) { onTakeGrams(g); setGrams(''); setGramsOpen(false); }
-            }}
+      <div className="use-row">
+        {unit === 'unit' && (
+          <button
+            type="button" className="use-nudge"
+            onClick={nudge}
+            disabled={busy || empty || n >= item.quantity}
+            aria-label={`One more ${noun || 'item'}`}
           >
-            <input
-              type="number"
-              inputMode="decimal"
-              min="0"
-              step="any"
-              autoFocus
-              value={grams}
-              onChange={(e) => setGrams(e.target.value)}
-              placeholder="grams used"
-              aria-label="Grams used"
-            />
-            <button type="submit" disabled={busy || !(Number(grams) > 0)}>Use</button>
-          </form>
-        ) : (
-          <button type="button" className="link-button take-grams-link" onClick={() => setGramsOpen(true)}>
-            Log an exact weight instead
+            &minus;
           </button>
-        )
-      )}
+        )}
+        <input
+          className="use-input"
+          type="number" inputMode="decimal" min="0" max={maxAmount} step="any"
+          value={amount}
+          onChange={(e) => setAmount(e.target.value)}
+          onBlur={() => amount !== '' && setAmount(clamp(n))}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') { e.preventDefault(); commit(); }
+          }}
+          placeholder="0"
+          aria-label={`Amount used, in ${unitLabel}`}
+          disabled={busy || empty}
+        />
+        <span className="label muted use-unit">{unitLabel}</span>
+      </div>
 
-      {!canGrams && !empty && (
-        <button onClick={onFinish} disabled={busy}>Finished it</button>
+      {equivalent && <p className="label muted use-equivalent">{equivalent}</p>}
+
+      <button type="button" className="primary use-btn" onClick={commit} disabled={busy || empty || !valid}>
+        {valid ? `Use ${niceNumber(n)} ${unitLabel}` : 'Use'}
+      </button>
+
+      {!empty && (
+        <button type="button" className="link-button take-finish" onClick={onFinish} disabled={busy}>
+          Finished it
+        </button>
       )}
     </div>
   );

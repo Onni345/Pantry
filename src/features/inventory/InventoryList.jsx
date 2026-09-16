@@ -11,6 +11,8 @@ import ScanSession from '../scan/ScanSession.jsx';
 import { LOCATIONS } from '../../db/schema.js';
 import './inventory.css';
 
+const LOC_VAR = { fridge: '--loc-fridge', freezer: '--loc-freezer', pantry: '--loc-pantry' };
+
 /**
  * The kitchen screen: a place, a picture of what's in it, then the food.
  *
@@ -86,6 +88,7 @@ export default function InventoryList() {
             className={`place-dot${i === index ? ' is-current' : ''}`}
             aria-selected={i === index}
             aria-label={l}
+            style={{ '--dot-color': `var(${LOC_VAR[l] || '--accent'})` }}
             onClick={() => jump(i)}
           />
         ))}

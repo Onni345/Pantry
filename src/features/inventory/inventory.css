@@ -65,7 +65,10 @@
   background: var(--line);
   transition: background 0.2s;
 }
-.place-dot.is-current::after { background: var(--accent); }
+/* Each dot picks up its own place's colour once current, rather than one
+   flat accent for all three -- the dot row previews the same colour the
+   page itself is about to show. */
+.place-dot.is-current::after { background: var(--dot-color, var(--accent)); }
 
 /*
  * The page. It slides in from whichever side you came from, so the motion
@@ -176,10 +179,16 @@
    calorie figures line up under them. */
 .food-figures {
   display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: none;
+}
+
+.food-figures-text {
+  display: flex;
   flex-direction: column;
   align-items: flex-end;
   gap: 0;
-  flex: none;
 }
 
 .food-amount {
@@ -191,6 +200,18 @@
 .food-kcal { font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
 /* Not an error — just the reason this row contributes nothing to intake. */
 .food-kcal.is-missing { color: var(--review-ink); }
+
+/* How much is left, at a glance, in the shelf's own colour — see the note
+   above ConsumptionRing in ItemRow.jsx. */
+.consumption-ring { flex: none; }
+.consumption-ring-track { fill: none; stroke: var(--line); stroke-width: 2.5; }
+.consumption-ring-fill {
+  fill: none;
+  stroke: var(--muted);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  transition: stroke-dashoffset 0.3s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
 
 .is-out .food-name, .is-out .food-amount { opacity: 0.5; }
 

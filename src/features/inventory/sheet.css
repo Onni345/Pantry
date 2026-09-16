@@ -144,55 +144,73 @@
 .sheet-nutrition.is-missing .label { color: var(--review-ink); }
 .sheet-nutrition.is-missing button { white-space: nowrap; padding-right: 0; }
 
-/* Taking some: one stepper, then named portions, then grams -- quietest
-   last, because that is also least-used last. */
-.stepper {
+/*
+ * Using some. Count and weight are the same fact about the same food, so
+ * they share one number field — this switch just picks which unit that
+ * number is in. Same shape as the servings/weight switch in "Add by hand",
+ * because it's the same kind of choice.
+ */
+.qty-toggle {
   display: flex;
-  align-items: stretch;
+  height: 2.25rem;
   border: 1px solid var(--line);
   border-radius: 999px;
   overflow: hidden;
-  height: 3rem;
 }
-.stepper-btn {
-  flex: none;
-  width: 3.25rem;
-  font-size: 22px;
-  font-weight: 400;
-  line-height: 1;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-}
-.stepper-btn:first-child { border-right: 1px solid var(--line); }
-.stepper-btn:last-child { border-left: 1px solid var(--line); }
-.stepper-label, .stepper-input {
+.qty-toggle button {
   flex: 1;
-  min-width: 0;
   border: none;
   border-radius: 0;
   background: transparent;
-  text-align: center;
-  font-size: 15px;
-  font-weight: 600;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 700;
   text-transform: capitalize;
 }
-.stepper-input {
-  font-variant-numeric: tabular-nums;
-  padding: 0;
+.qty-toggle button.is-active {
+  background: var(--accent);
+  color: #fff;
 }
-.stepper-input::-webkit-outer-spin-button,
-.stepper-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
-.stepper-input { -moz-appearance: textfield; appearance: textfield; }
 
-.take-portions { gap: var(--space-1) var(--space-2); }
-.chip {
-  border-radius: 999px;
-  padding: var(--space-1) var(--space-3);
-  font-size: 14px;
-  white-space: nowrap;
+/* The field itself: an optional quick "one more" on the left when counting
+   whole units (grams has no natural "one"), the number, the unit it's in. */
+.use-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-2);
 }
-.chip .label { font-size: 12px; }
+.use-nudge {
+  flex: none;
+  width: 3rem;
+  font-size: 20px;
+  border-radius: var(--radius);
+}
+.use-input {
+  flex: 1;
+  min-width: 0;
+  height: 3rem;
+  text-align: center;
+  font-size: 22px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.use-input::-webkit-outer-spin-button,
+.use-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.use-input { -moz-appearance: textfield; appearance: textfield; }
+.use-unit {
+  flex: none;
+  align-self: center;
+  min-width: 3rem;
+  text-transform: lowercase;
+}
+
+/* The conversion, quiet, right under the number it explains -- "yes, that's
+   the same amount" without asking you to do the arithmetic yourself. */
+.use-equivalent { text-align: center; }
+
+.use-btn { width: 100%; padding: var(--space-3); font-size: 16px; }
+
+.take-finish { align-self: flex-start; padding-left: 0; }
 
 .take-grams input { flex: 1; min-width: 0; }
 .take-grams input::-webkit-outer-spin-button,

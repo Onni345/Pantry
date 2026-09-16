@@ -30,7 +30,7 @@
   padding: var(--space-3);
   border: 0;
   border-radius: calc(var(--radius) * 2);
-  color: var(--ink);
+  color: var(--tone-ink); /* sits on a pastel tone fill, not the page bg */
   /* Depth from an inset highlight rather than a drop shadow — the surface
      lifts without the page growing a layer of floating cards. */
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
